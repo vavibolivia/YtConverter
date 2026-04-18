@@ -130,16 +130,21 @@ public sealed class DownloadService : IDownloadService
 
     private static string GetUniquePath(string path)
     {
-        if (!File.Exists(path)) return path;
+        // FileMode.CreateNew 는 OS 수준에서 원자적 → 동시 변환 race 방지
         var dir = Path.GetDirectoryName(path)!;
         var name = Path.GetFileNameWithoutExtension(path);
         var ext = Path.GetExtension(path);
-        for (int i = 1; i < 1000; i++)
+        for (int i = 0; i < 1000; i++)
         {
-            var candidate = Path.Combine(dir, $"{name} ({i}){ext}");
-            if (!File.Exists(candidate)) return candidate;
+            var candidate = i == 0 ? path : Path.Combine(dir, $"{name} ({i}){ext}");
+            try
+            {
+                using var fs = new FileStream(candidate, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+                return candidate;
+            }
+            catch (IOException) { continue; }
         }
-        return path;
+        return Path.Combine(dir, $"{name}_{Guid.NewGuid():N}{ext}");
     }
 
     private static void TryDelete(string path)

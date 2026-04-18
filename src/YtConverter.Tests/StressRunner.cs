@@ -127,7 +127,11 @@ internal static class StressRunner
                 try
                 {
                     var tasks = new[] { validUrl1, validUrl2, validUrl1 }.Select((u, i) =>
-                        svc.ConvertAsync(u, i % 2 == 0 ? OutputFormat.Mp3 : OutputFormat.Mp4, concurDir, new Progress<ConversionProgress>(_ => { }), globalCt));
+                    {
+                        var subDir = Path.Combine(concurDir, $"c{i}");
+                        Directory.CreateDirectory(subDir);
+                        return svc.ConvertAsync(u, i % 2 == 0 ? OutputFormat.Mp3 : OutputFormat.Mp4, subDir, new Progress<ConversionProgress>(_ => { }), globalCt);
+                    });
                     var results = await Task.WhenAll(tasks);
                     concurSw.Stop();
                     var okCount = results.Count(r => r is not null);
