@@ -25,11 +25,17 @@ public sealed class DownloadService : IDownloadService
     private readonly HttpClient _http;
     private readonly string _workRoot;
 
+    private const long ChunkSize = 9_898_989; // ~9.4 MB — YoutubeExplode 가 사용하는 값
+
     public DownloadService(IFfmpegProvisioner ffmpeg)
     {
         _yt = new YoutubeClient();
         _ffmpeg = ffmpeg;
         _http = new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
+        // YouTube 는 일반 User-Agent 없으면 단일 연결을 매우 느리게 throttle 함
+        _http.DefaultRequestHeaders.UserAgent.ParseAdd(
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+        _http.DefaultRequestHeaders.AcceptEncoding.ParseAdd("identity");
         _workRoot = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "YtConverter", "work");
@@ -187,47 +193,40 @@ public sealed class DownloadService : IDownloadService
             return;
         }
 
-        var req = new HttpRequestMessage(HttpMethod.Get, info.Url);
-        if (existing > 0)
-            req.Headers.Range = new RangeHeaderValue(existing, null);
-
-        using var resp = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
-        if (existing > 0 && resp.StatusCode != HttpStatusCode.PartialContent)
-        {
-            // 서버가 Range 미지원 → 처음부터 다시
-            AppLogger.Instance.Warn($"Range 미지원, 재다운로드: {Path.GetFileName(destPath)}");
-            resp.Dispose();
-            try { File.Delete(destPath); } catch { }
-            existing = 0;
-            using var req2 = new HttpRequestMessage(HttpMethod.Get, info.Url);
-            using var resp2 = await _http.SendAsync(req2, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
-            resp2.EnsureSuccessStatusCode();
-            await CopyToFileAsync(resp2, destPath, existing, progressBytes, ct).ConfigureAwait(false);
-            return;
-        }
-
-        resp.EnsureSuccessStatusCode();
         AppLogger.Instance.Info(existing > 0
             ? $"스트림 이어받기: {Path.GetFileName(destPath)} ({existing:N0} / {expected:N0} B)"
             : $"스트림 다운로드: {Path.GetFileName(destPath)} ({expected:N0} B)");
-        await CopyToFileAsync(resp, destPath, existing, progressBytes, ct).ConfigureAwait(false);
-    }
 
-    private static async Task CopyToFileAsync(
-        HttpResponseMessage resp, string destPath, long startFromBytes,
-        Action<long> progressBytes, CancellationToken ct)
-    {
-        await using var input = await resp.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
-        var mode = startFromBytes > 0 ? FileMode.Append : FileMode.Create;
-        await using var output = new FileStream(destPath, mode, FileAccess.Write, FileShare.None, 81920, useAsync: true);
-        var buf = new byte[81920];
-        long total = startFromBytes;
-        int n;
-        while ((n = await input.ReadAsync(buf, ct).ConfigureAwait(false)) > 0)
+        // YouTube 의 throttling 회피: 큰 파일을 ~9.4MB 청크로 Range 요청
+        // (YoutubeExplode 와 동일한 전략)
+        await using var output = new FileStream(destPath, FileMode.OpenOrCreate, FileAccess.Write, FileShare.None, 81920, useAsync: true);
+        output.Seek(existing, SeekOrigin.Begin);
+        output.SetLength(existing);
+
+        long position = existing;
+        while (position < expected)
         {
-            await output.WriteAsync(buf.AsMemory(0, n), ct).ConfigureAwait(false);
-            total += n;
-            progressBytes(total);
+            ct.ThrowIfCancellationRequested();
+            long chunkEnd = Math.Min(position + ChunkSize - 1, expected - 1);
+
+            var req = new HttpRequestMessage(HttpMethod.Get, info.Url);
+            req.Headers.Range = new RangeHeaderValue(position, chunkEnd);
+
+            using var resp = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+            if (resp.StatusCode != HttpStatusCode.PartialContent && resp.StatusCode != HttpStatusCode.OK)
+            {
+                resp.EnsureSuccessStatusCode();
+            }
+
+            await using var input = await resp.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+            var buf = new byte[81920];
+            int n;
+            while ((n = await input.ReadAsync(buf, ct).ConfigureAwait(false)) > 0)
+            {
+                await output.WriteAsync(buf.AsMemory(0, n), ct).ConfigureAwait(false);
+                position += n;
+                progressBytes(position);
+            }
         }
         await output.FlushAsync(ct).ConfigureAwait(false);
     }
