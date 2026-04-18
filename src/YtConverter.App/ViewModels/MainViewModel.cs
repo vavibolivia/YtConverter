@@ -17,7 +17,9 @@ namespace YtConverter.App.ViewModels;
 public partial class MainViewModel : ObservableObject
 {
     private readonly IDownloadService _downloadService;
+    private readonly QueueStore _queue;
     private SemaphoreSlim _slots;
+    private bool _suspendSave;
 
     [ObservableProperty] private string _url = string.Empty;
     [ObservableProperty] private OutputFormat _selectedFormat = OutputFormat.Mp3;
@@ -54,16 +56,55 @@ public partial class MainViewModel : ObservableObject
     public MainViewModel(IDownloadService downloadService)
     {
         _downloadService = downloadService;
+        _queue = new QueueStore();
         _slots = new SemaphoreSlim(MaxConcurrency, MaxConcurrency);
         AppLogger.Instance.AttachSink(AppendLog);
         AppLogger.Instance.Info("앱 시작");
         Directory.CreateDirectory(OutputFolder);
+
+        // 저장된 큐 복원
+        _suspendSave = true;
+        try
+        {
+            var restored = _queue.Load();
+            int resumeCount = 0;
+            foreach (var snap in restored)
+            {
+                var vm = JobViewModel.FromSnapshot(snap);
+                vm.RequestRemove = j => Jobs.Remove(j);
+                vm.StateChanged = PersistQueue;
+                Jobs.Add(vm);
+                if (vm.Status == JobStatus.Idle && !string.IsNullOrEmpty(vm.Url)) resumeCount++;
+            }
+            if (restored.Count > 0)
+                AppLogger.Instance.Info($"이전 큐 복원: 총 {restored.Count}건 (재개 대상 {resumeCount}건)");
+        }
+        finally { _suspendSave = false; }
+
         Jobs.CollectionChanged += (_, __) =>
         {
             StartAllCommand.NotifyCanExecuteChanged();
             CancelAllCommand.NotifyCanExecuteChanged();
             ClearCompletedCommand.NotifyCanExecuteChanged();
+            PersistQueue();
         };
+
+        // 앱 시작 직후 재개할 작업이 있으면 자동 시작
+        if (Jobs.Any(j => j.Status == JobStatus.Idle))
+        {
+            Application.Current?.Dispatcher.BeginInvoke(async () =>
+            {
+                await Task.Delay(400);
+                AppLogger.Instance.Info("미완료 작업 자동 재개");
+                if (StartAllCommand.CanExecute(null)) await StartAllCommand.ExecuteAsync(null);
+            });
+        }
+    }
+
+    private void PersistQueue()
+    {
+        if (_suspendSave) return;
+        _queue.Save(Jobs.Select(j => j.ToSnapshot()));
     }
 
     [RelayCommand(CanExecute = nameof(CanAdd))]
@@ -75,6 +116,7 @@ public partial class MainViewModel : ObservableObject
         {
             var job = new JobViewModel { Url = u, Format = SelectedFormat };
             job.RequestRemove = j => Jobs.Remove(j);
+            job.StateChanged = PersistQueue;
             Jobs.Add(job);
             AppLogger.Instance.Info($"작업 추가: [{job.FormatText}] {u}");
         }

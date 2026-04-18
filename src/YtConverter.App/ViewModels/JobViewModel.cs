@@ -20,6 +20,41 @@ public partial class JobViewModel : ObservableObject
 
     public CancellationTokenSource? Cts { get; set; }
     public Action<JobViewModel>? RequestRemove { get; set; }
+    public Action? StateChanged { get; set; }
+
+    public Models.JobSnapshot ToSnapshot() => new()
+    {
+        Url = Url,
+        Format = Format,
+        Status = Status,
+        Title = Title,
+        OutputPath = OutputPath,
+        ErrorMessage = ErrorMessage
+    };
+
+    public static JobViewModel FromSnapshot(Models.JobSnapshot s)
+    {
+        // 실행 중이었던 작업은 Idle 로 복원해 재시도 대상이 되게 함
+        var restoredStatus = s.Status switch
+        {
+            JobStatus.Resolving or JobStatus.Downloading or JobStatus.Muxing => JobStatus.Idle,
+            _ => s.Status
+        };
+        return new JobViewModel
+        {
+            Url = s.Url,
+            Format = s.Format,
+            Title = s.Title,
+            OutputPath = s.OutputPath,
+            ErrorMessage = s.ErrorMessage,
+            Status = restoredStatus,
+            StatusText = restoredStatus == JobStatus.Idle ? "대기 중 (재개됨)" :
+                         restoredStatus == JobStatus.Completed ? "완료" :
+                         restoredStatus == JobStatus.Failed ? "오류" :
+                         restoredStatus == JobStatus.Canceled ? "취소됨" : "대기 중",
+            Progress = restoredStatus == JobStatus.Completed ? 1.0 : 0
+        };
+    }
 
     public string FormatText => Format == OutputFormat.Mp3 ? "MP3" : "MP4";
     public string DisplayTitle => string.IsNullOrEmpty(Title)
@@ -37,7 +72,10 @@ public partial class JobViewModel : ObservableObject
         OnPropertyChanged(nameof(StatusGlyph));
         CancelCommand.NotifyCanExecuteChanged();
         RemoveCommand.NotifyCanExecuteChanged();
+        StateChanged?.Invoke();
     }
+
+    partial void OnErrorMessageChanged(string? value) => StateChanged?.Invoke();
 
     public bool IsRunning => Status is JobStatus.Resolving or JobStatus.Downloading or JobStatus.Muxing;
     public bool IsRemovable => Status is JobStatus.Idle or JobStatus.Completed or JobStatus.Failed or JobStatus.Canceled;
@@ -85,5 +123,9 @@ public partial class JobViewModel : ObservableObject
     }
     private bool CanOpenFolder() => Status == JobStatus.Completed && File.Exists(OutputPath);
 
-    partial void OnOutputPathChanged(string value) => OpenFolderCommand.NotifyCanExecuteChanged();
+    partial void OnOutputPathChanged(string value)
+    {
+        OpenFolderCommand.NotifyCanExecuteChanged();
+        StateChanged?.Invoke();
+    }
 }
