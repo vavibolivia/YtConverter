@@ -70,7 +70,34 @@ public sealed class DownloadService : IDownloadService
         Directory.CreateDirectory(outputFolder);
         var safeTitle = SanitizeFileName(video.Title);
         var ext = format == OutputFormat.Mp3 ? "mp3" : "mp4";
-        var outputPath = GetUniquePath(Path.Combine(outputFolder, $"{safeTitle}.{ext}"));
+        var outputPath = Path.Combine(outputFolder, $"{safeTitle}.{ext}");
+
+        // 이미 변환된 결과가 있으면 재사용 (번호 붙이기 지양)
+        if (File.Exists(outputPath))
+        {
+            var fi = new FileInfo(outputPath);
+            if (fi.Length > 1024) // 유의미한 크기 = 이전 변환 성공물
+            {
+                progress.Report(new ConversionProgress(JobStatus.Completed, 1.0, video.Title));
+                AppLogger.Instance.Info($"기존 파일 재사용 (이미 변환됨): {outputPath}");
+                return new ConversionResult(outputPath, video.Title, video.Duration ?? TimeSpan.Zero);
+            }
+            // 0바이트 placeholder 는 삭제
+            try { File.Delete(outputPath); } catch { }
+        }
+
+        // 새 placeholder 예약 (동시 변환 충돌 방지용, 실패 시 finally 에서 정리)
+        try
+        {
+            using var fs = new FileStream(outputPath, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+        }
+        catch (IOException)
+        {
+            // 바로 직전에 다른 스레드가 만들었을 수 있음 → GUID suffix 로 고유화
+            outputPath = Path.Combine(outputFolder, $"{safeTitle}_{Guid.NewGuid().ToString("N")[..6]}.{ext}");
+            using var fs = new FileStream(outputPath, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+        }
+        bool placeholderStillReserved = true;
 
         // 재개 가능한 작업 디렉터리 (URL+format 이 같으면 같은 디렉터리 재사용)
         var jobId = StableJobId(url, format);
@@ -105,75 +132,89 @@ public sealed class DownloadService : IDownloadService
             chosen = new List<IStreamInfo> { videoStream, audio };
         }
 
-        // 스트림 다운로드 (Range resume)
-        long totalBytes = chosen.Sum(s => s.Size.Bytes);
-        long cumulative = chosen.Sum(s => FileSize(Path.Combine(workDir, StreamFileName(s))));
-        var streamPaths = new List<string>();
         try
         {
-            foreach (var s in chosen)
+            // 스트림 다운로드 (Range resume)
+            long totalBytes = chosen.Sum(s => s.Size.Bytes);
+            long cumulative = chosen.Sum(s => FileSize(Path.Combine(workDir, StreamFileName(s))));
+            var streamPaths = new List<string>();
+            try
             {
-                var streamPath = Path.Combine(workDir, StreamFileName(s));
-                streamPaths.Add(streamPath);
-                await DownloadStreamWithResumeAsync(s, streamPath, p =>
+                foreach (var s in chosen)
                 {
-                    var overall = totalBytes > 0 ? 0.1 + 0.8 * (cumulative + p) / totalBytes : 0.1;
-                    progress.Report(new ConversionProgress(JobStatus.Downloading, Math.Clamp(overall, 0, 1), video.Title));
-                }, ct).ConfigureAwait(false);
-                cumulative += s.Size.Bytes;
+                    var streamPath = Path.Combine(workDir, StreamFileName(s));
+                    streamPaths.Add(streamPath);
+                    await DownloadStreamWithResumeAsync(s, streamPath, p =>
+                    {
+                        var overall = totalBytes > 0 ? 0.1 + 0.8 * (cumulative + p) / totalBytes : 0.1;
+                        progress.Report(new ConversionProgress(JobStatus.Downloading, Math.Clamp(overall, 0, 1), video.Title));
+                    }, ct).ConfigureAwait(false);
+                    cumulative += s.Size.Bytes;
+                }
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception ex)
+            {
+                AppLogger.Instance.Error("스트림 다운로드 실패", ex);
+                throw MapException(ex);
+            }
+
+            progress.Report(new ConversionProgress(JobStatus.Muxing, 0.95, video.Title));
+
+            var partPath = outputPath + ".part";
+            try { if (File.Exists(partPath)) File.Delete(partPath); } catch { }
+
+            try
+            {
+                await RunFfmpegAsync(ffmpegPath, streamPaths, partPath, format, ct).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                try { if (File.Exists(partPath)) File.Delete(partPath); } catch { }
+                throw;
+            }
+            catch (Exception ex)
+            {
+                try { if (File.Exists(partPath)) File.Delete(partPath); } catch { }
+                AppLogger.Instance.Error("FFmpeg mux 실패", ex);
+                throw MapException(ex);
+            }
+
+            // 성공 → 최종 파일로 교체 (placeholder 덮어쓰기)
+            try
+            {
+                if (File.Exists(outputPath)) File.Delete(outputPath);
+                File.Move(partPath, outputPath);
+                placeholderStillReserved = false;
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Instance.Error("최종 파일 이동 실패", ex);
+                throw;
+            }
+
+            try { Directory.Delete(workDir, true); } catch { }
+
+            progress.Report(new ConversionProgress(JobStatus.Completed, 1.0, video.Title));
+            AppLogger.Instance.Info($"변환 완료: {outputPath}");
+            return new ConversionResult(outputPath, video.Title, video.Duration ?? TimeSpan.Zero);
+        }
+        finally
+        {
+            // 실패/취소 시 0바이트 placeholder 가 사용자 폴더에 남지 않도록
+            if (placeholderStillReserved)
+            {
+                try
+                {
+                    if (File.Exists(outputPath) && new FileInfo(outputPath).Length == 0)
+                    {
+                        File.Delete(outputPath);
+                        AppLogger.Instance.Info($"placeholder 정리: {Path.GetFileName(outputPath)}");
+                    }
+                }
+                catch { }
             }
         }
-        catch (OperationCanceledException)
-        {
-            // 작업 디렉터리는 남겨두어 다음 실행 시 재개
-            throw;
-        }
-        catch (Exception ex)
-        {
-            AppLogger.Instance.Error("스트림 다운로드 실패", ex);
-            throw MapException(ex);
-        }
-
-        progress.Report(new ConversionProgress(JobStatus.Muxing, 0.9, video.Title));
-
-        // FFmpeg 로 mux / 트랜스코드 — .part 에 기록 후 원자적 rename
-        var partPath = outputPath + ".part";
-        try { if (File.Exists(partPath)) File.Delete(partPath); } catch { }
-
-        try
-        {
-            await RunFfmpegAsync(ffmpegPath, streamPaths, partPath, format, ct).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException)
-        {
-            try { if (File.Exists(partPath)) File.Delete(partPath); } catch { }
-            throw;
-        }
-        catch (Exception ex)
-        {
-            try { if (File.Exists(partPath)) File.Delete(partPath); } catch { }
-            AppLogger.Instance.Error("FFmpeg mux 실패", ex);
-            throw MapException(ex);
-        }
-
-        // 성공 → 최종 파일로 교체
-        try
-        {
-            if (File.Exists(outputPath)) File.Delete(outputPath);
-            File.Move(partPath, outputPath);
-        }
-        catch (Exception ex)
-        {
-            AppLogger.Instance.Error("최종 파일 이동 실패", ex);
-            throw;
-        }
-
-        // 작업 디렉터리 정리
-        try { Directory.Delete(workDir, true); } catch { }
-
-        progress.Report(new ConversionProgress(JobStatus.Completed, 1.0, video.Title));
-        AppLogger.Instance.Info($"변환 완료: {outputPath}");
-        return new ConversionResult(outputPath, video.Title, video.Duration ?? TimeSpan.Zero);
     }
 
     private async Task DownloadStreamWithResumeAsync(
@@ -323,21 +364,4 @@ public sealed class DownloadService : IDownloadService
         return string.IsNullOrWhiteSpace(cleaned) ? "output" : cleaned;
     }
 
-    private static string GetUniquePath(string path)
-    {
-        var dir = Path.GetDirectoryName(path)!;
-        var name = Path.GetFileNameWithoutExtension(path);
-        var ext = Path.GetExtension(path);
-        for (int i = 0; i < 1000; i++)
-        {
-            var candidate = i == 0 ? path : Path.Combine(dir, $"{name} ({i}){ext}");
-            try
-            {
-                using var fs = new FileStream(candidate, FileMode.CreateNew, FileAccess.Write, FileShare.None);
-                return candidate;
-            }
-            catch (IOException) { continue; }
-        }
-        return Path.Combine(dir, $"{name}_{Guid.NewGuid():N}{ext}");
-    }
 }

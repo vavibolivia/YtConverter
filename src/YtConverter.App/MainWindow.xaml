@@ -244,7 +244,27 @@
                                                 <ColumnDefinition Width="140"/>
                                                 <ColumnDefinition Width="Auto"/>
                                             </Grid.ColumnDefinitions>
-                                            <TextBlock Grid.Column="0" Text="{Binding StatusGlyph}" FontSize="18" VerticalAlignment="Center"/>
+                                            <TextBlock Grid.Column="0" Text="{Binding StatusGlyph}" FontSize="18" VerticalAlignment="Center" HorizontalAlignment="Center">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsActive}" Value="True">
+                                                                <DataTrigger.EnterActions>
+                                                                    <BeginStoryboard Name="PulseSb">
+                                                                        <Storyboard RepeatBehavior="Forever" AutoReverse="True">
+                                                                            <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                                                             From="0.35" To="1.0" Duration="0:0:0.7"/>
+                                                                        </Storyboard>
+                                                                    </BeginStoryboard>
+                                                                </DataTrigger.EnterActions>
+                                                                <DataTrigger.ExitActions>
+                                                                    <StopStoryboard BeginStoryboardName="PulseSb"/>
+                                                                </DataTrigger.ExitActions>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
                                             <Border Grid.Column="1" Background="#EEF2FF" CornerRadius="4" Padding="6,3" VerticalAlignment="Center" HorizontalAlignment="Left">
                                                 <TextBlock Text="{Binding FormatText}" FontSize="11" FontWeight="SemiBold" Foreground="#4338CA"/>
                                             </Border>
@@ -254,7 +274,9 @@
                                                 <TextBlock Text="{Binding ErrorMessage}" Foreground="{StaticResource ErrorBrush}" FontSize="11" TextWrapping="Wrap"
                                                            Visibility="{Binding ErrorMessage, Converter={StaticResource StringToVis}, FallbackValue=Collapsed}"/>
                                             </StackPanel>
-                                            <ProgressBar Grid.Column="3" Value="{Binding Progress}" Maximum="1.0" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                                            <ProgressBar Grid.Column="3" Value="{Binding Progress}" Maximum="1.0"
+                                                         IsIndeterminate="{Binding IsMuxing}"
+                                                         VerticalAlignment="Center" Margin="0,0,12,0"/>
                                             <StackPanel Grid.Column="4" Orientation="Horizontal">
                                                 <Button Content="📂" Command="{Binding OpenFolderCommand}" Style="{StaticResource IconButton}"/>
                                                 <Button Content="⏹" Command="{Binding CancelCommand}" Style="{StaticResource IconButton}"/>

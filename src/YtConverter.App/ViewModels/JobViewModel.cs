@@ -70,10 +70,15 @@ public partial class JobViewModel : ObservableObject
         OnPropertyChanged(nameof(IsRunning));
         OnPropertyChanged(nameof(IsRemovable));
         OnPropertyChanged(nameof(StatusGlyph));
+        OnPropertyChanged(nameof(IsMuxing));
+        OnPropertyChanged(nameof(IsActive));
         CancelCommand.NotifyCanExecuteChanged();
         RemoveCommand.NotifyCanExecuteChanged();
         StateChanged?.Invoke();
     }
+
+    public bool IsMuxing => Status == JobStatus.Muxing;
+    public bool IsActive => Status is JobStatus.Resolving or JobStatus.Downloading or JobStatus.Muxing;
 
     partial void OnErrorMessageChanged(string? value) => StateChanged?.Invoke();
 
