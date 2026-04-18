@@ -4,6 +4,8 @@
              xmlns:local="clr-namespace:YtConverter.App"
              StartupUri="MainWindow.xaml">
     <Application.Resources>
-         
+        <ResourceDictionary xmlns:conv="clr-namespace:YtConverter.App.Converters">
+            <conv:StringToVisibilityConverter x:Key="StringToVis"/>
+        </ResourceDictionary>
     </Application.Resources>
 </Application>

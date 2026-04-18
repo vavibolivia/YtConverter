@@ -11,6 +11,7 @@ public partial class MainWindow : Window
         InitializeComponent();
         var ffmpeg = new FfmpegProvisioner();
         var downloader = new DownloadService(ffmpeg);
-        DataContext = new MainViewModel(downloader);
+        var license = new LicenseService();
+        DataContext = new MainViewModel(downloader, license);
     }
 }

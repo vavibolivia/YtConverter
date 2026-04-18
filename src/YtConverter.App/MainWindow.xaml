@@ -4,7 +4,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
-        Title="YouTube Converter" Height="620" Width="780"
+        Title="YouTube Converter — 병렬 큐" Height="720" Width="900"
         WindowStartupLocation="CenterScreen"
         FontSize="13">
     <Window.Resources>
@@ -14,57 +14,79 @@
         </Style>
         <Style TargetType="TextBox">
             <Setter Property="Padding" Value="6,4"/>
-            <Setter Property="VerticalContentAlignment" Value="Center"/>
         </Style>
         <Style TargetType="Label">
             <Setter Property="VerticalAlignment" Value="Center"/>
         </Style>
     </Window.Resources>
-    <Grid Margin="16">
+    <Grid Margin="14">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="160"/>
         </Grid.RowDefinitions>
 
-        <Grid Grid.Row="0" Margin="0,0,0,10">
+        <!-- URL 입력 (멀티라인) -->
+        <Grid Grid.Row="0" Margin="0,0,0,8">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="80"/>
+                <ColumnDefinition Width="90"/>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
-            <Label Content="URL" Grid.Column="0"/>
+            <Label Content="URL(들)" Grid.Column="0" VerticalAlignment="Top" Margin="0,6,0,0"/>
             <TextBox Grid.Column="1"
                      Text="{Binding Url, UpdateSourceTrigger=PropertyChanged}"
+                     AcceptsReturn="True" TextWrapping="Wrap"
+                     MinHeight="60" MaxHeight="100"
+                     VerticalScrollBarVisibility="Auto"
+                     ToolTip="한 줄에 하나씩 여러 URL 을 붙여넣으세요"
                      AutomationProperties.AutomationId="UrlTextBox"/>
-            <Button Grid.Column="2" Content="붙여넣기" Command="{Binding PasteCommand}"
-                    AutomationProperties.AutomationId="PasteButton"/>
+            <StackPanel Grid.Column="2" VerticalAlignment="Top">
+                <Button Content="붙여넣기" Command="{Binding PasteCommand}" Margin="4,0,0,4"
+                        AutomationProperties.AutomationId="PasteButton"/>
+                <Button Content="작업 추가 ▶" Command="{Binding AddCommand}"
+                        Margin="4,0,0,0" FontWeight="Bold"
+                        AutomationProperties.AutomationId="AddButton"/>
+            </StackPanel>
         </Grid>
 
-        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,10">
-            <Label Content="포맷" Width="80"/>
+        <!-- 포맷 + 동시성 -->
+        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,8">
+            <Label Content="포맷" Width="90"/>
             <RadioButton Content="MP3 (오디오)" GroupName="Format" Margin="4,0,16,0"
-                         IsChecked="{Binding IsMp3Selected}"
-                         VerticalContentAlignment="Center"
+                         IsChecked="{Binding IsMp3Selected}" VerticalContentAlignment="Center"
                          AutomationProperties.AutomationId="Mp3Radio"/>
-            <RadioButton Content="MP4 (영상)" GroupName="Format" Margin="0"
-                         IsChecked="{Binding IsMp4Selected}"
-                         VerticalContentAlignment="Center"
+            <RadioButton Content="MP4 (영상)" GroupName="Format" Margin="0,0,24,0"
+                         IsChecked="{Binding IsMp4Selected}" VerticalContentAlignment="Center"
                          AutomationProperties.AutomationId="Mp4Radio"/>
+            <Label Content="동시 작업" Margin="8,0,4,0"/>
+            <ComboBox SelectedValue="{Binding MaxConcurrency}" SelectedValuePath="Content"
+                      MinWidth="60" VerticalContentAlignment="Center"
+                      AutomationProperties.AutomationId="ConcurrencyCombo">
+                <ComboBoxItem Content="1"/>
+                <ComboBoxItem Content="2"/>
+                <ComboBoxItem Content="3" IsSelected="True"/>
+                <ComboBoxItem Content="4"/>
+                <ComboBoxItem Content="5"/>
+                <ComboBoxItem Content="6"/>
+            </ComboBox>
         </StackPanel>
 
-        <Grid Grid.Row="2" Margin="0,0,0,10">
+        <!-- 저장 폴더 -->
+        <Grid Grid.Row="2" Margin="0,0,0,8">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="80"/>
+                <ColumnDefinition Width="90"/>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
             <Label Content="저장 폴더" Grid.Column="0"/>
             <TextBox Grid.Column="1" Text="{Binding OutputFolder, UpdateSourceTrigger=PropertyChanged}"
+                     VerticalContentAlignment="Center"
                      AutomationProperties.AutomationId="FolderTextBox"/>
             <Button Grid.Column="2" Content="찾아보기" Command="{Binding BrowseFolderCommand}"
                     AutomationProperties.AutomationId="BrowseButton"/>
@@ -72,25 +94,89 @@
                     AutomationProperties.AutomationId="OpenFolderButton"/>
         </Grid>
 
-        <StackPanel Grid.Row="3" Orientation="Horizontal" Margin="0,0,0,14">
-            <Button Content="변환 시작" Command="{Binding StartCommand}"
-                    MinWidth="120" FontWeight="Bold"
-                    AutomationProperties.AutomationId="StartButton"/>
-            <Button Content="취소" Command="{Binding CancelCommand}"
-                    MinWidth="80"
-                    AutomationProperties.AutomationId="CancelButton"/>
-        </StackPanel>
-
-        <GroupBox Grid.Row="4" Header="진행 상황" Padding="8" Margin="0,0,0,10">
-            <StackPanel>
-                <TextBlock Text="{Binding VideoTitle}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
-                <TextBlock Text="{Binding StatusText}" Margin="0,4,0,6"/>
-                <ProgressBar Value="{Binding Progress}" Maximum="1.0" Height="18"
-                             AutomationProperties.AutomationId="ProgressBar"/>
+        <!-- 전체 제어 + 라이선스 -->
+        <Grid Grid.Row="3" Margin="0,0,0,8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <StackPanel Grid.Column="0" Orientation="Horizontal">
+                <Button Content="▶ 모두 시작" Command="{Binding StartAllCommand}"
+                        MinWidth="120" FontWeight="Bold" Background="#2E7D32" Foreground="White"
+                        AutomationProperties.AutomationId="StartAllButton"/>
+                <Button Content="⏹ 모두 취소" Command="{Binding CancelAllCommand}"
+                        MinWidth="100"
+                        AutomationProperties.AutomationId="CancelAllButton"/>
+                <Button Content="🗑 완료된 작업 지우기" Command="{Binding ClearCompletedCommand}"
+                        MinWidth="150"
+                        AutomationProperties.AutomationId="ClearCompletedButton"/>
             </StackPanel>
+            <Button Grid.Column="1" Content="{Binding TierBadge}" Command="{Binding OpenLicenseCommand}"
+                    Padding="10,6" MinWidth="180" FontWeight="SemiBold"
+                    AutomationProperties.AutomationId="TierBadge"/>
+        </Grid>
+
+        <!-- 작업 리스트 -->
+        <GroupBox Grid.Row="4" Header="변환 작업">
+            <ItemsControl ItemsSource="{Binding Jobs}" VirtualizingPanel.IsVirtualizing="True"
+                          AutomationProperties.AutomationId="JobsList">
+                <ItemsControl.Template>
+                    <ControlTemplate>
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <ItemsPresenter/>
+                        </ScrollViewer>
+                    </ControlTemplate>
+                </ItemsControl.Template>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Border BorderBrush="#CCC" BorderThickness="0,0,0,1" Padding="6,6" Margin="0">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="26"/>
+                                    <ColumnDefinition Width="46"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="120"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{Binding StatusGlyph}" FontSize="16"
+                                           VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                                <TextBlock Grid.Column="1" Text="{Binding FormatText}" FontWeight="SemiBold"
+                                           VerticalAlignment="Center"/>
+                                <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="4,0">
+                                    <TextBlock Text="{Binding DisplayTitle}"
+                                               TextTrimming="CharacterEllipsis" FontWeight="SemiBold"/>
+                                    <TextBlock Text="{Binding StatusText}" Opacity="0.7" FontSize="11"/>
+                                    <TextBlock Text="{Binding ErrorMessage}" Foreground="#C62828" FontSize="11"
+                                               TextWrapping="Wrap"
+                                               Visibility="{Binding ErrorMessage, Converter={StaticResource StringToVis}, FallbackValue=Collapsed}"/>
+                                </StackPanel>
+                                <ProgressBar Grid.Column="3" Value="{Binding Progress}" Maximum="1.0"
+                                             Height="14" VerticalAlignment="Center"/>
+                                <StackPanel Grid.Column="4" Orientation="Horizontal">
+                                    <Button Content="📂" ToolTip="폴더에서 보기"
+                                            Command="{Binding OpenFolderCommand}"
+                                            MinWidth="32" Padding="6,2"/>
+                                    <Button Content="⏹" ToolTip="취소"
+                                            Command="{Binding CancelCommand}"
+                                            MinWidth="32" Padding="6,2"/>
+                                    <Button Content="✕" ToolTip="제거"
+                                            Command="{Binding RemoveCommand}"
+                                            MinWidth="32" Padding="6,2"/>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
         </GroupBox>
 
-        <GroupBox Grid.Row="5" Header="로그">
+        <!-- 하단 요약 -->
+        <Grid Grid.Row="5" Margin="0,6,0,6">
+            <TextBlock Text="{Binding Jobs.Count, StringFormat='총 작업: {0}'}" Opacity="0.7"/>
+        </Grid>
+
+        <!-- 로그 -->
+        <GroupBox Grid.Row="6" Header="로그">
             <ListBox ItemsSource="{Binding LogLines}"
                      ScrollViewer.VerticalScrollBarVisibility="Auto"
                      FontFamily="Consolas" FontSize="11"
