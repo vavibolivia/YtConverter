@@ -156,7 +156,8 @@ internal static class StressRunner
             WriteSummary(summaryPath, iter, totalPass, totalFail, unexpectedFail, totalBytes, swGlobal.Elapsed, perRoleStats, memMb);
 
             // 작은 숨 고르기
-            await Task.Delay(1000, globalCt).ContinueWith(_ => { }, TaskContinuationOptions.OnlyOnCanceled);
+            try { await Task.Delay(1000, globalCt); }
+            catch (OperationCanceledException) { break; }
         }
 
         Log(logPath, $"[STRESS] 종료 — iter={iter} pass={totalPass} fail={totalFail} unexpected={unexpectedFail} uptime={swGlobal.Elapsed:hh\\:mm\\:ss}");
