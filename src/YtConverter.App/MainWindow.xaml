@@ -6,7 +6,7 @@
         xmlns:svc="clr-namespace:YtConverter.App.Services"
         mc:Ignorable="d"
         Title="{Binding Loc[title]}"
-        Height="780" Width="940" MinHeight="620" MinWidth="740"
+        Height="780" Width="940" MinHeight="480" MinWidth="640"
         WindowStartupLocation="CenterScreen"
         Background="{StaticResource BgBrush}"
         FontFamily="Segoe UI, Malgun Gothic, Meiryo, Microsoft YaHei" FontSize="13"
@@ -244,7 +244,9 @@
                                                 <ColumnDefinition Width="140"/>
                                                 <ColumnDefinition Width="Auto"/>
                                             </Grid.ColumnDefinitions>
-                                            <TextBlock Grid.Column="0" Text="{Binding StatusGlyph}" FontSize="18" VerticalAlignment="Center" HorizontalAlignment="Center">
+                                            <TextBlock Grid.Column="0" Text="{Binding StatusGlyph}" FontSize="18" VerticalAlignment="Center" HorizontalAlignment="Center"
+                                                       AutomationProperties.Name="{Binding StatusText}"
+                                                       AutomationProperties.LiveSetting="Polite">
                                                 <TextBlock.Style>
                                                     <Style TargetType="TextBlock">
                                                         <Style.Triggers>
@@ -278,6 +280,7 @@
                                                          IsIndeterminate="{Binding IsMuxing}"
                                                          VerticalAlignment="Center" Margin="0,0,12,0"/>
                                             <StackPanel Grid.Column="4" Orientation="Horizontal">
+                                                <Button Content="🔁" ToolTip="재시도" Command="{Binding RetryCommand}" Style="{StaticResource IconButton}"/>
                                                 <Button Content="📂" Command="{Binding OpenFolderCommand}" Style="{StaticResource IconButton}"/>
                                                 <Button Content="⏹" Command="{Binding CancelCommand}" Style="{StaticResource IconButton}"/>
                                                 <Button Content="✕" Command="{Binding RemoveCommand}" Style="{StaticResource IconButton}"/>

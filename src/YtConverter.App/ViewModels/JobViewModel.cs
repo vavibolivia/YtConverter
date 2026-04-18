@@ -20,6 +20,7 @@ public partial class JobViewModel : ObservableObject
 
     public CancellationTokenSource? Cts { get; set; }
     public Action<JobViewModel>? RequestRemove { get; set; }
+    public Action<JobViewModel>? RequestRetry { get; set; }
     public Action? StateChanged { get; set; }
 
     public Models.JobSnapshot ToSnapshot() => new()
@@ -74,6 +75,7 @@ public partial class JobViewModel : ObservableObject
         OnPropertyChanged(nameof(IsActive));
         CancelCommand.NotifyCanExecuteChanged();
         RemoveCommand.NotifyCanExecuteChanged();
+        RetryCommand.NotifyCanExecuteChanged();
         StateChanged?.Invoke();
     }
 
@@ -108,6 +110,10 @@ public partial class JobViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanRemove))]
     private void Remove() => RequestRemove?.Invoke(this);
     private bool CanRemove() => IsRemovable;
+
+    [RelayCommand(CanExecute = nameof(CanRetry))]
+    private void Retry() => RequestRetry?.Invoke(this);
+    private bool CanRetry() => Status is JobStatus.Failed or JobStatus.Canceled;
 
     [RelayCommand(CanExecute = nameof(CanOpenFolder))]
     private void OpenFolder()

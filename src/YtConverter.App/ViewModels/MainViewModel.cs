@@ -110,8 +110,7 @@ public partial class MainViewModel : ObservableObject
             foreach (var snap in restored)
             {
                 var vm = JobViewModel.FromSnapshot(snap);
-                vm.RequestRemove = j => Jobs.Remove(j);
-                vm.StateChanged = PersistQueue;
+                AttachJob(vm);
                 Jobs.Add(vm);
                 if (vm.Status == JobStatus.Idle && !string.IsNullOrEmpty(vm.Url)) resumeCount++;
             }
@@ -139,6 +138,13 @@ public partial class MainViewModel : ObservableObject
                 if (StartAllCommand.CanExecute(null)) await StartAllCommand.ExecuteAsync(null);
             });
         }
+    }
+
+    private void AttachJob(JobViewModel job)
+    {
+        job.RequestRemove = j => Jobs.Remove(j);
+        job.RequestRetry = async j => { await RunJobAsync(j).ConfigureAwait(false); };
+        job.StateChanged = PersistQueue;
     }
 
     private void PersistQueue()
@@ -170,8 +176,7 @@ public partial class MainViewModel : ObservableObject
         foreach (var u in urls)
         {
             var job = new JobViewModel { Url = u, Format = SelectedFormat };
-            job.RequestRemove = j => Jobs.Remove(j);
-            job.StateChanged = PersistQueue;
+            AttachJob(job);
             Jobs.Add(job);
             AppLogger.Instance.Info($"작업 추가: [{job.FormatText}] {u}");
         }

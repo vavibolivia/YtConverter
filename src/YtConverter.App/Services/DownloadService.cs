@@ -26,13 +26,14 @@ public sealed class DownloadService : IDownloadService
     private readonly string _workRoot;
 
     private const long ChunkSize = 9_898_989; // ~9.4 MB — YoutubeExplode 가 사용하는 값
+    private static readonly TimeSpan PerRequestTimeout = TimeSpan.FromSeconds(60);
 
     public DownloadService(IFfmpegProvisioner ffmpeg)
     {
         _yt = new YoutubeClient();
         _ffmpeg = ffmpeg;
+        // I-03: HttpClient 전체 timeout 은 Infinite 유지 (긴 스트림 대응), 각 요청에 LinkedTokenSource 로 60s 워치독
         _http = new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
-        // YouTube 는 일반 User-Agent 없으면 단일 연결을 매우 느리게 throttle 함
         _http.DefaultRequestHeaders.UserAgent.ParseAdd(
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
         _http.DefaultRequestHeaders.AcceptEncoding.ParseAdd("identity");
@@ -251,24 +252,51 @@ public sealed class DownloadService : IDownloadService
             ct.ThrowIfCancellationRequested();
             long chunkEnd = Math.Min(position + ChunkSize - 1, expected - 1);
 
-            var req = new HttpRequestMessage(HttpMethod.Get, info.Url);
-            req.Headers.Range = new RangeHeaderValue(position, chunkEnd);
-
-            using var resp = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
-            if (resp.StatusCode != HttpStatusCode.PartialContent && resp.StatusCode != HttpStatusCode.OK)
+            // I-03: 청크당 재시도 (exponential backoff, 최대 3회). 개별 chunk 는 60s per-request timeout.
+            const int maxAttempts = 3;
+            Exception? lastError = null;
+            for (int attempt = 1; attempt <= maxAttempts; attempt++)
             {
-                resp.EnsureSuccessStatusCode();
-            }
+                ct.ThrowIfCancellationRequested();
+                using var perReq = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                perReq.CancelAfter(PerRequestTimeout);
+                try
+                {
+                    var req = new HttpRequestMessage(HttpMethod.Get, info.Url);
+                    req.Headers.Range = new RangeHeaderValue(position, chunkEnd);
+                    using var resp = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, perReq.Token).ConfigureAwait(false);
+                    if (resp.StatusCode != HttpStatusCode.PartialContent && resp.StatusCode != HttpStatusCode.OK)
+                        resp.EnsureSuccessStatusCode();
 
-            await using var input = await resp.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
-            var buf = new byte[81920];
-            int n;
-            while ((n = await input.ReadAsync(buf, ct).ConfigureAwait(false)) > 0)
-            {
-                await output.WriteAsync(buf.AsMemory(0, n), ct).ConfigureAwait(false);
-                position += n;
-                progressBytes(position);
+                    await using var input = await resp.Content.ReadAsStreamAsync(perReq.Token).ConfigureAwait(false);
+                    var buf = new byte[81920];
+                    int n;
+                    while ((n = await input.ReadAsync(buf, perReq.Token).ConfigureAwait(false)) > 0)
+                    {
+                        await output.WriteAsync(buf.AsMemory(0, n), ct).ConfigureAwait(false);
+                        position += n;
+                        progressBytes(position);
+                    }
+                    lastError = null;
+                    break;
+                }
+                catch (OperationCanceledException) when (!ct.IsCancellationRequested && perReq.IsCancellationRequested)
+                {
+                    // per-request timeout — 재시도 가능
+                    lastError = new IOException($"청크 다운로드 타임아웃 ({PerRequestTimeout.TotalSeconds:F0}s)");
+                }
+                catch (HttpRequestException ex) { lastError = ex; }
+                catch (IOException ex) { lastError = ex; }
+
+                if (attempt < maxAttempts)
+                {
+                    var delay = TimeSpan.FromSeconds(Math.Pow(2, attempt)); // 2s, 4s, 8s
+                    AppLogger.Instance.Warn($"청크 재시도 {attempt}/{maxAttempts - 1} (@{position:N0}B): {lastError?.Message} → {delay.TotalSeconds}s 대기");
+                    try { await Task.Delay(delay, ct).ConfigureAwait(false); }
+                    catch (OperationCanceledException) { throw; }
+                }
             }
+            if (lastError is not null) throw lastError;
         }
         await output.FlushAsync(ct).ConfigureAwait(false);
     }
@@ -367,8 +395,9 @@ public sealed class DownloadService : IDownloadService
                     }
                     else if (new FileInfo(f).Length == 0)
                     {
-                        // 0바이트 placeholder 는 즉시 삭제
-                        File.Delete(f);
+                        // I-02 수정: 0바이트 파일도 age > 1h 일 때만 삭제 (사용자의 일반 0-byte 파일 보호)
+                        var age0 = DateTime.UtcNow - File.GetLastWriteTimeUtc(f);
+                        if (age0.TotalHours > 1) File.Delete(f);
                     }
                 }
                 catch { }
