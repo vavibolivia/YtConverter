@@ -30,6 +30,10 @@ public sealed class QueueStore
     {
         try
         {
+            // B-07: 이전 세션의 .tmp 파편 정리
+            var tmp = _path + ".tmp";
+            try { if (File.Exists(tmp)) File.Delete(tmp); } catch { }
+
             if (!File.Exists(_path)) return new();
             var json = File.ReadAllText(_path);
             if (string.IsNullOrWhiteSpace(json)) return new();

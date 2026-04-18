@@ -77,8 +77,17 @@ public partial class MainViewModel : ObservableObject
     partial void OnMaxConcurrencyChanged(int value)
     {
         var allowed = Math.Max(1, value);
-        _slots = new SemaphoreSlim(allowed, allowed);
-        AppLogger.Instance.Info($"동시 작업 수 변경: {allowed}");
+        // B-01 수정: 실행 중인 세마포는 교체하지 않음 (기존 Release 가 새 세마포에 가면 SemaphoreFullException)
+        // 실행 중인 작업이 없을 때만 교체, 그 외엔 다음 배치부터 반영
+        if (!Jobs.Any(j => j.IsRunning))
+        {
+            _slots = new SemaphoreSlim(allowed, allowed);
+            AppLogger.Instance.Info($"동시 작업 수 변경: {allowed}");
+        }
+        else
+        {
+            AppLogger.Instance.Info($"동시 작업 수 변경 예약: 현재 작업 완료 후 {allowed}건 적용");
+        }
     }
 
     public MainViewModel(IDownloadService downloadService)
@@ -89,6 +98,8 @@ public partial class MainViewModel : ObservableObject
         AppLogger.Instance.AttachSink(AppendLog);
         AppLogger.Instance.Info("앱 시작");
         Directory.CreateDirectory(OutputFolder);
+        // B-10: 사용자 폴더의 고아 임시파일 정리
+        DownloadService.CleanupStaleArtifacts(OutputFolder);
 
         // 저장된 큐 복원
         _suspendSave = true;
@@ -117,7 +128,8 @@ public partial class MainViewModel : ObservableObject
             PersistQueue();
         };
 
-        // 앱 시작 직후 재개할 작업이 있으면 자동 시작
+        // B-05: Failed/Canceled 는 사용자가 명시적으로 시작해야 하므로 자동 재개 대상에서 제외
+        // 앱 시작 직후 Idle 인 작업만 자동 시작
         if (Jobs.Any(j => j.Status == JobStatus.Idle))
         {
             Application.Current?.Dispatcher.BeginInvoke(async () =>
@@ -132,7 +144,22 @@ public partial class MainViewModel : ObservableObject
     private void PersistQueue()
     {
         if (_suspendSave) return;
-        _queue.Save(Jobs.Select(j => j.ToSnapshot()));
+        // B-12 수정: Jobs 컬렉션은 UI 스레드 전용. 백그라운드 스레드에서 Enumerate 시
+        // UI 가 동시에 Add/Remove 하면 InvalidOperationException. UI 스레드에서 스냅샷 생성.
+        var dispatcher = Application.Current?.Dispatcher;
+        if (dispatcher is null || dispatcher.CheckAccess())
+        {
+            var snapshot = Jobs.Select(j => j.ToSnapshot()).ToList();
+            _ = Task.Run(() => _queue.Save(snapshot));
+        }
+        else
+        {
+            dispatcher.BeginInvoke(() =>
+            {
+                var snapshot = Jobs.Select(j => j.ToSnapshot()).ToList();
+                _ = Task.Run(() => _queue.Save(snapshot));
+            });
+        }
     }
 
     [RelayCommand(CanExecute = nameof(CanAdd))]
@@ -177,7 +204,9 @@ public partial class MainViewModel : ObservableObject
 
     private async Task RunJobAsync(JobViewModel job)
     {
-        await _slots.WaitAsync().ConfigureAwait(false);
+        // B-01 수정: 로컬 참조로 획득·반환 → 중간에 _slots 가 교체되어도 안전
+        var slots = _slots;
+        await slots.WaitAsync().ConfigureAwait(false);
         try
         {
             using var cts = new CancellationTokenSource();
@@ -233,7 +262,12 @@ public partial class MainViewModel : ObservableObject
         }
         finally
         {
-            _slots.Release();
+            slots.Release();
+            // 실행 중인 작업이 모두 끝났고 MaxConcurrency 가 현재 슬롯과 다르면 지연 적용
+            if (!Jobs.Any(j => j.IsRunning) && _slots.CurrentCount != MaxConcurrency)
+            {
+                _slots = new SemaphoreSlim(MaxConcurrency, MaxConcurrency);
+            }
         }
     }
 

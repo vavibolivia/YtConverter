@@ -100,7 +100,8 @@ public sealed class DownloadService : IDownloadService
         bool placeholderStillReserved = true;
 
         // 재개 가능한 작업 디렉터리 (URL+format 이 같으면 같은 디렉터리 재사용)
-        var jobId = StableJobId(url, format);
+        // B-02 수정: URL 전체 대신 videoId 로 hash — &t=, &list= 등 쿼리가 달라도 같은 work 공유
+        var jobId = StableJobId(video.Id.Value, format);
         var workDir = Path.Combine(_workRoot, jobId);
         Directory.CreateDirectory(workDir);
 
@@ -334,11 +335,46 @@ public sealed class DownloadService : IDownloadService
         return $"{kind}.{ext}";
     }
 
-    private static string StableJobId(string url, OutputFormat fmt)
+    private static string StableJobId(string videoIdOrKey, OutputFormat fmt)
     {
         using var sha = SHA1.Create();
-        var bytes = sha.ComputeHash(Encoding.UTF8.GetBytes($"{url}|{fmt}"));
+        var bytes = sha.ComputeHash(Encoding.UTF8.GetBytes($"{videoIdOrKey}|{fmt}"));
         return Convert.ToHexString(bytes)[..16];
+    }
+
+    // B-10: 사용자 출력 폴더의 앱 생성 임시 파일 청소
+    public static void CleanupStaleArtifacts(string outputFolder)
+    {
+        try
+        {
+            if (!Directory.Exists(outputFolder)) return;
+            foreach (var f in Directory.EnumerateFiles(outputFolder))
+            {
+                try
+                {
+                    var name = Path.GetFileName(f);
+                    if (name.EndsWith(".part", StringComparison.OrdinalIgnoreCase) ||
+                        name.Contains(".mp3.stream-", StringComparison.OrdinalIgnoreCase) ||
+                        name.Contains(".mp4.stream-", StringComparison.OrdinalIgnoreCase) ||
+                        name.EndsWith(".ytdl-tmp", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var age = DateTime.UtcNow - File.GetLastWriteTimeUtc(f);
+                        if (age.TotalHours > 1) // 1시간 이상 방치 = 고아
+                        {
+                            File.Delete(f);
+                            AppLogger.Instance.Info($"고아 임시파일 정리: {name}");
+                        }
+                    }
+                    else if (new FileInfo(f).Length == 0)
+                    {
+                        // 0바이트 placeholder 는 즉시 삭제
+                        File.Delete(f);
+                    }
+                }
+                catch { }
+            }
+        }
+        catch { }
     }
 
     private static long FileSize(string path) =>
@@ -352,6 +388,8 @@ public sealed class DownloadService : IDownloadService
         VideoUnavailableException => new InvalidOperationException("삭제되었거나 비공개 영상입니다.", ex),
         VideoUnplayableException => new InvalidOperationException("재생 불가 영상입니다 (연령/지역 제한).", ex),
         HttpRequestException => new InvalidOperationException("네트워크 오류. 다시 시도하세요.", ex),
+        // B-03: UnauthorizedAccessException 도 파일 쓰기 실패로 분류
+        UnauthorizedAccessException => new InvalidOperationException("저장 폴더에 쓰기 권한이 없습니다.", ex),
         IOException => new InvalidOperationException("저장 공간이 부족하거나 파일을 쓸 수 없습니다.", ex),
         _ => ex
     };
