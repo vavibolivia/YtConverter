@@ -21,11 +21,39 @@ public partial class MainViewModel : ObservableObject
     private SemaphoreSlim _slots;
     private bool _suspendSave;
 
+    public LocalizationService Loc => LocalizationService.Instance;
+    public IReadOnlyList<LocalizationService.LanguageOption> Languages => LocalizationService.Languages;
+    public string SelectedLanguage
+    {
+        get => Loc.Language;
+        set { Loc.Language = value; OnPropertyChanged(); RefreshJobStatusTexts(); }
+    }
+
+    private void RefreshJobStatusTexts()
+    {
+        foreach (var j in Jobs)
+        {
+            j.StatusText = j.Status switch
+            {
+                JobStatus.Idle => Loc["status_idle"],
+                JobStatus.Resolving => Loc["status_resolving"],
+                JobStatus.Downloading => Loc.Format("status_downloading", j.Progress),
+                JobStatus.Muxing => Loc["status_muxing"],
+                JobStatus.Completed => Loc["status_completed"],
+                JobStatus.Canceled => Loc["status_canceled"],
+                JobStatus.Failed => Loc["status_failed"],
+                _ => j.StatusText
+            };
+        }
+    }
+
     [ObservableProperty] private string _url = string.Empty;
     [ObservableProperty] private OutputFormat _selectedFormat = OutputFormat.Mp3;
     [ObservableProperty] private string _outputFolder = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Music", "YtConverter");
     [ObservableProperty] private int _maxConcurrency = 3;
+    [ObservableProperty] private string? _clipboardSuggestion;
+    private string? _dismissedClipboard;
 
     public ObservableCollection<JobViewModel> Jobs { get; } = new();
     public ObservableCollection<string> LogLines { get; } = new();
@@ -165,10 +193,10 @@ public partial class MainViewModel : ObservableObject
                 job.Status = p.Status;
                 job.StatusText = p.Status switch
                 {
-                    JobStatus.Resolving => "스트림 해석 중",
-                    JobStatus.Downloading => $"다운로드 {p.Ratio:P0}",
-                    JobStatus.Muxing => "변환 중",
-                    JobStatus.Completed => "완료",
+                    JobStatus.Resolving => Loc["status_resolving"],
+                    JobStatus.Downloading => Loc.Format("status_downloading", p.Ratio),
+                    JobStatus.Muxing => Loc["status_muxing"],
+                    JobStatus.Completed => Loc["status_completed"],
                     _ => p.Status.ToString()
                 };
                 if (!string.IsNullOrEmpty(p.VideoTitle)) job.Title = p.VideoTitle!;
@@ -182,19 +210,19 @@ public partial class MainViewModel : ObservableObject
                 job.Title = result.VideoTitle;
                 job.Status = JobStatus.Completed;
                 job.Progress = 1.0;
-                job.StatusText = "완료";
+                job.StatusText = Loc["status_completed"];
                 AppLogger.Instance.Info($"[완료] {result.VideoTitle}");
             }
             catch (OperationCanceledException)
             {
                 job.Status = JobStatus.Canceled;
-                job.StatusText = "취소됨";
+                job.StatusText = Loc["status_canceled"];
                 AppLogger.Instance.Warn($"[취소] {job.Url}");
             }
             catch (Exception ex)
             {
                 job.Status = JobStatus.Failed;
-                job.StatusText = "오류";
+                job.StatusText = Loc["status_failed"];
                 job.ErrorMessage = ex.Message;
                 AppLogger.Instance.Error($"[실패] {job.Url}", ex);
             }
@@ -266,6 +294,41 @@ public partial class MainViewModel : ObservableObject
                 Url = string.IsNullOrEmpty(Url) ? Clipboard.GetText().Trim() : Url + Environment.NewLine + Clipboard.GetText().Trim();
         }
         catch (Exception ex) { AppLogger.Instance.Warn($"클립보드 읽기 실패: {ex.Message}"); }
+    }
+
+    public void CheckClipboardForUrl()
+    {
+        try
+        {
+            if (!Clipboard.ContainsText()) return;
+            var text = Clipboard.GetText().Trim();
+            if (string.IsNullOrEmpty(text)) return;
+            if (!System.Text.RegularExpressions.Regex.IsMatch(text,
+                @"^(https?://)?(www\.)?(youtube\.com/|youtu\.be/)\S+",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase)) return;
+            if (text == _dismissedClipboard) return;
+            // URL 이미 입력창/큐에 있으면 제안하지 않음
+            if (Url.Contains(text, StringComparison.OrdinalIgnoreCase)) return;
+            if (Jobs.Any(j => j.Url.Equals(text, StringComparison.OrdinalIgnoreCase))) return;
+            ClipboardSuggestion = text;
+        }
+        catch { /* 다른 프로세스가 클립보드 잠금 중일 수 있음 */ }
+    }
+
+    [RelayCommand]
+    private void AcceptClipboard()
+    {
+        if (string.IsNullOrWhiteSpace(ClipboardSuggestion)) return;
+        Url = string.IsNullOrEmpty(Url) ? ClipboardSuggestion : Url + Environment.NewLine + ClipboardSuggestion;
+        ClipboardSuggestion = null;
+        if (AddCommand.CanExecute(null)) AddCommand.Execute(null);
+    }
+
+    [RelayCommand]
+    private void DismissClipboard()
+    {
+        _dismissedClipboard = ClipboardSuggestion;
+        ClipboardSuggestion = null;
     }
 
     private void AppendLog(string line)

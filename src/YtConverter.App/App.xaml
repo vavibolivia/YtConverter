@@ -1,4 +1,4 @@
-﻿<Application x:Class="YtConverter.App.App"
+<Application x:Class="YtConverter.App.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="clr-namespace:YtConverter.App"
@@ -6,6 +6,130 @@
     <Application.Resources>
         <ResourceDictionary xmlns:conv="clr-namespace:YtConverter.App.Converters">
             <conv:StringToVisibilityConverter x:Key="StringToVis"/>
+            <conv:NullToCollapsedConverter x:Key="NullToCollapsed"/>
+            <conv:CountToVisibilityConverter x:Key="CountToVis"/>
+
+            <!-- 색상 팔레트 -->
+            <SolidColorBrush x:Key="BgBrush" Color="#F7F8FA"/>
+            <SolidColorBrush x:Key="CardBrush" Color="#FFFFFF"/>
+            <SolidColorBrush x:Key="BorderBrush" Color="#E4E7EB"/>
+            <SolidColorBrush x:Key="TextBrush" Color="#1F2937"/>
+            <SolidColorBrush x:Key="TextMutedBrush" Color="#6B7280"/>
+            <SolidColorBrush x:Key="AccentBrush" Color="#2563EB"/>
+            <SolidColorBrush x:Key="AccentHoverBrush" Color="#1D4ED8"/>
+            <SolidColorBrush x:Key="SuccessBrush" Color="#16A34A"/>
+            <SolidColorBrush x:Key="ErrorBrush" Color="#DC2626"/>
+            <SolidColorBrush x:Key="WarnBgBrush" Color="#FEF3C7"/>
+            <SolidColorBrush x:Key="WarnBorderBrush" Color="#F59E0B"/>
+
+            <!-- 기본 버튼 -->
+            <Style TargetType="Button">
+                <Setter Property="Padding" Value="14,8"/>
+                <Setter Property="Margin" Value="0,0,8,0"/>
+                <Setter Property="FontSize" Value="13"/>
+                <Setter Property="Cursor" Value="Hand"/>
+                <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
+                <Setter Property="Background" Value="White"/>
+                <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="Bd"
+                                    Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="1" CornerRadius="6" Padding="{TemplateBinding Padding}">
+                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="Bd" Property="Background" Value="#F3F4F6"/>
+                                </Trigger>
+                                <Trigger Property="IsEnabled" Value="False">
+                                    <Setter Property="Opacity" Value="0.45"/>
+                                    <Setter Property="Cursor" Value="Arrow"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
+            <!-- 주요 액션 버튼 -->
+            <Style x:Key="PrimaryButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+                <Setter Property="Background" Value="{StaticResource AccentBrush}"/>
+                <Setter Property="Foreground" Value="White"/>
+                <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+                <Setter Property="FontWeight" Value="SemiBold"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="Bd"
+                                    Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="1" CornerRadius="6" Padding="{TemplateBinding Padding}">
+                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                  TextBlock.Foreground="{TemplateBinding Foreground}"/>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="Bd" Property="Background" Value="{StaticResource AccentHoverBrush}"/>
+                                </Trigger>
+                                <Trigger Property="IsEnabled" Value="False">
+                                    <Setter Property="Opacity" Value="0.45"/>
+                                    <Setter Property="Cursor" Value="Arrow"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
+            <!-- 아이콘 전용 작은 버튼 -->
+            <Style x:Key="IconButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+                <Setter Property="Padding" Value="8,4"/>
+                <Setter Property="Margin" Value="0,0,4,0"/>
+                <Setter Property="MinWidth" Value="34"/>
+                <Setter Property="FontSize" Value="14"/>
+            </Style>
+
+            <!-- TextBox -->
+            <Style TargetType="TextBox">
+                <Setter Property="Padding" Value="10,8"/>
+                <Setter Property="FontSize" Value="13"/>
+                <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
+                <Setter Property="Background" Value="White"/>
+                <Setter Property="VerticalContentAlignment" Value="Center"/>
+            </Style>
+
+            <!-- ComboBox - 기본 -->
+            <Style TargetType="ComboBox">
+                <Setter Property="Padding" Value="10,6"/>
+                <Setter Property="MinHeight" Value="34"/>
+            </Style>
+
+            <!-- 카드 Border -->
+            <Style x:Key="Card" TargetType="Border">
+                <Setter Property="Background" Value="{StaticResource CardBrush}"/>
+                <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
+                <Setter Property="BorderThickness" Value="1"/>
+                <Setter Property="CornerRadius" Value="10"/>
+                <Setter Property="Padding" Value="16"/>
+                <Setter Property="Margin" Value="0,0,0,12"/>
+            </Style>
+
+            <!-- ProgressBar 모던 -->
+            <Style TargetType="ProgressBar">
+                <Setter Property="Height" Value="8"/>
+                <Setter Property="Foreground" Value="{StaticResource AccentBrush}"/>
+                <Setter Property="Background" Value="#E5E7EB"/>
+                <Setter Property="BorderThickness" Value="0"/>
+            </Style>
+
+            <Style TargetType="Label">
+                <Setter Property="VerticalAlignment" Value="Center"/>
+                <Setter Property="Foreground" Value="{StaticResource TextMutedBrush}"/>
+                <Setter Property="FontSize" Value="12"/>
+            </Style>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

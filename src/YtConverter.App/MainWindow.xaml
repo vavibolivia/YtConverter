@@ -3,175 +3,297 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:svc="clr-namespace:YtConverter.App.Services"
         mc:Ignorable="d"
-        Title="YouTube Converter — 병렬 큐" Height="720" Width="900"
+        Title="{Binding Loc[title]}"
+        Height="780" Width="940" MinHeight="620" MinWidth="740"
         WindowStartupLocation="CenterScreen"
-        FontSize="13">
-    <Window.Resources>
-        <Style TargetType="Button">
-            <Setter Property="Padding" Value="12,6"/>
-            <Setter Property="Margin" Value="4,0"/>
-        </Style>
-        <Style TargetType="TextBox">
-            <Setter Property="Padding" Value="6,4"/>
-        </Style>
-        <Style TargetType="Label">
-            <Setter Property="VerticalAlignment" Value="Center"/>
-        </Style>
-    </Window.Resources>
-    <Grid Margin="14">
+        Background="{StaticResource BgBrush}"
+        FontFamily="Segoe UI, Malgun Gothic, Meiryo, Microsoft YaHei" FontSize="13"
+        Foreground="{StaticResource TextBrush}"
+        AllowDrop="True"
+        Drop="Window_Drop" DragEnter="Window_DragEnter" DragLeave="Window_DragLeave" DragOver="Window_DragOver"
+        Activated="Window_Activated">
+
+    <Grid Margin="24,18,24,18">
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="160"/>
         </Grid.RowDefinitions>
 
-        <!-- URL 입력 (멀티라인) -->
-        <Grid Grid.Row="0" Margin="0,0,0,8">
+        <!-- 헤더 -->
+        <Grid Grid.Row="0" Margin="0,0,0,14">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="90"/>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
-            <Label Content="URL(들)" Grid.Column="0" VerticalAlignment="Top" Margin="0,6,0,0"/>
-            <TextBox Grid.Column="1"
-                     Text="{Binding Url, UpdateSourceTrigger=PropertyChanged}"
-                     AcceptsReturn="True" TextWrapping="Wrap"
-                     MinHeight="60" MaxHeight="100"
-                     VerticalScrollBarVisibility="Auto"
-                     ToolTip="한 줄에 하나씩 여러 URL 을 붙여넣으세요"
-                     AutomationProperties.AutomationId="UrlTextBox"/>
-            <StackPanel Grid.Column="2" VerticalAlignment="Top">
-                <Button Content="붙여넣기" Command="{Binding PasteCommand}" Margin="4,0,0,4"
-                        AutomationProperties.AutomationId="PasteButton"/>
-                <Button Content="작업 추가 ▶" Command="{Binding AddCommand}"
-                        Margin="4,0,0,0" FontWeight="Bold"
-                        AutomationProperties.AutomationId="AddButton"/>
+            <StackPanel Grid.Column="0">
+                <TextBlock Text="{Binding Loc[title]}" FontSize="20" FontWeight="SemiBold"/>
+                <TextBlock Text="{Binding Loc[subtitle]}" Foreground="{StaticResource TextMutedBrush}" Margin="0,2,0,0"/>
+            </StackPanel>
+            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                <TextBlock Text="🌐" FontSize="15" VerticalAlignment="Center" Margin="0,0,6,0" Opacity="0.7"/>
+                <ComboBox ItemsSource="{Binding Languages}"
+                          SelectedValue="{Binding SelectedLanguage}"
+                          SelectedValuePath="Code"
+                          DisplayMemberPath="Label"
+                          MinWidth="120" Margin="0,0,8,0"
+                          AutomationProperties.AutomationId="LanguageCombo"/>
+                <Button Content="{Binding Loc[open_folder]}" Command="{Binding OpenFolderCommand}"/>
             </StackPanel>
         </Grid>
 
-        <!-- 포맷 + 동시성 -->
-        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,8">
-            <Label Content="포맷" Width="90"/>
-            <RadioButton Content="MP3 (오디오)" GroupName="Format" Margin="4,0,16,0"
-                         IsChecked="{Binding IsMp3Selected}" VerticalContentAlignment="Center"
-                         AutomationProperties.AutomationId="Mp3Radio"/>
-            <RadioButton Content="MP4 (영상)" GroupName="Format" Margin="0,0,24,0"
-                         IsChecked="{Binding IsMp4Selected}" VerticalContentAlignment="Center"
-                         AutomationProperties.AutomationId="Mp4Radio"/>
-            <Label Content="동시 작업" Margin="8,0,4,0"/>
-            <ComboBox SelectedValue="{Binding MaxConcurrency}" SelectedValuePath="Content"
-                      MinWidth="60" VerticalContentAlignment="Center"
-                      AutomationProperties.AutomationId="ConcurrencyCombo">
-                <ComboBoxItem Content="1"/>
-                <ComboBoxItem Content="2"/>
-                <ComboBoxItem Content="3" IsSelected="True"/>
-                <ComboBoxItem Content="4"/>
-                <ComboBoxItem Content="5"/>
-                <ComboBoxItem Content="6"/>
-            </ComboBox>
-        </StackPanel>
+        <!-- 클립보드 감지 배너 -->
+        <Border Grid.Row="1" Background="{StaticResource WarnBgBrush}"
+                BorderBrush="{StaticResource WarnBorderBrush}" BorderThickness="1"
+                CornerRadius="8" Padding="12,10" Margin="0,0,0,12"
+                Visibility="{Binding ClipboardSuggestion, Converter={StaticResource NullToCollapsed}}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0">
+                    <TextBlock Text="{Binding Loc[clipboard_title]}" FontWeight="SemiBold"/>
+                    <TextBlock Text="{Binding ClipboardSuggestion}" TextTrimming="CharacterEllipsis"
+                               Foreground="{StaticResource TextMutedBrush}" Margin="0,2,0,0"/>
+                </StackPanel>
+                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                    <Button Content="{Binding Loc[accept]}" Command="{Binding AcceptClipboardCommand}" Style="{StaticResource PrimaryButton}"/>
+                    <Button Content="{Binding Loc[dismiss]}" Command="{Binding DismissClipboardCommand}"/>
+                </StackPanel>
+            </Grid>
+        </Border>
 
-        <!-- 저장 폴더 -->
-        <Grid Grid.Row="2" Margin="0,0,0,8">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="90"/>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="Auto"/>
-            </Grid.ColumnDefinitions>
-            <Label Content="저장 폴더" Grid.Column="0"/>
-            <TextBox Grid.Column="1" Text="{Binding OutputFolder, UpdateSourceTrigger=PropertyChanged}"
-                     VerticalContentAlignment="Center"
-                     AutomationProperties.AutomationId="FolderTextBox"/>
-            <Button Grid.Column="2" Content="찾아보기" Command="{Binding BrowseFolderCommand}"
-                    AutomationProperties.AutomationId="BrowseButton"/>
-            <Button Grid.Column="3" Content="폴더 열기" Command="{Binding OpenFolderCommand}"
-                    AutomationProperties.AutomationId="OpenFolderButton"/>
-        </Grid>
+        <!-- URL 입력 히어로 -->
+        <Border Grid.Row="2" Style="{StaticResource Card}">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <Grid Grid.Row="0">
+                    <TextBox x:Name="UrlBox"
+                             Text="{Binding Url, UpdateSourceTrigger=PropertyChanged}"
+                             AcceptsReturn="True" TextWrapping="Wrap"
+                             MinHeight="72" MaxHeight="140"
+                             VerticalScrollBarVisibility="Auto"
+                             VerticalContentAlignment="Top"
+                             FontSize="14"
+                             KeyDown="UrlBox_KeyDown"
+                             AutomationProperties.AutomationId="UrlTextBox"/>
+                    <!-- Placeholder overlay -->
+                    <TextBlock Text="{Binding Loc[url_placeholder]}"
+                               Foreground="#9CA3AF"
+                               Margin="14,10,12,0"
+                               IsHitTestVisible="False"
+                               VerticalAlignment="Top">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Url}" Value="">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                </Grid>
 
-        <!-- 전체 제어 -->
-        <StackPanel Grid.Row="3" Orientation="Horizontal" Margin="0,0,0,8">
-            <Button Content="▶ 모두 시작" Command="{Binding StartAllCommand}"
-                    MinWidth="120" FontWeight="Bold" Background="#2E7D32" Foreground="White"
-                    AutomationProperties.AutomationId="StartAllButton"/>
-            <Button Content="⏹ 모두 취소" Command="{Binding CancelAllCommand}"
-                    MinWidth="100"
-                    AutomationProperties.AutomationId="CancelAllButton"/>
-            <Button Content="🗑 완료된 작업 지우기" Command="{Binding ClearCompletedCommand}"
-                    MinWidth="150"
-                    AutomationProperties.AutomationId="ClearCompletedButton"/>
-        </StackPanel>
+                <Grid Grid.Row="1" Margin="0,12,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
 
-        <!-- 작업 리스트 -->
-        <GroupBox Grid.Row="4" Header="변환 작업">
-            <ItemsControl ItemsSource="{Binding Jobs}" VirtualizingPanel.IsVirtualizing="True"
-                          AutomationProperties.AutomationId="JobsList">
-                <ItemsControl.Template>
-                    <ControlTemplate>
-                        <ScrollViewer VerticalScrollBarVisibility="Auto">
-                            <ItemsPresenter/>
-                        </ScrollViewer>
-                    </ControlTemplate>
-                </ItemsControl.Template>
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate>
-                        <Border BorderBrush="#CCC" BorderThickness="0,0,0,1" Padding="6,6" Margin="0">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="26"/>
-                                    <ColumnDefinition Width="46"/>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="120"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="{Binding StatusGlyph}" FontSize="16"
-                                           VerticalAlignment="Center" HorizontalAlignment="Center"/>
-                                <TextBlock Grid.Column="1" Text="{Binding FormatText}" FontWeight="SemiBold"
-                                           VerticalAlignment="Center"/>
-                                <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="4,0">
-                                    <TextBlock Text="{Binding DisplayTitle}"
-                                               TextTrimming="CharacterEllipsis" FontWeight="SemiBold"/>
-                                    <TextBlock Text="{Binding StatusText}" Opacity="0.7" FontSize="11"/>
-                                    <TextBlock Text="{Binding ErrorMessage}" Foreground="#C62828" FontSize="11"
-                                               TextWrapping="Wrap"
-                                               Visibility="{Binding ErrorMessage, Converter={StaticResource StringToVis}, FallbackValue=Collapsed}"/>
-                                </StackPanel>
-                                <ProgressBar Grid.Column="3" Value="{Binding Progress}" Maximum="1.0"
-                                             Height="14" VerticalAlignment="Center"/>
-                                <StackPanel Grid.Column="4" Orientation="Horizontal">
-                                    <Button Content="📂" ToolTip="폴더에서 보기"
-                                            Command="{Binding OpenFolderCommand}"
-                                            MinWidth="32" Padding="6,2"/>
-                                    <Button Content="⏹" ToolTip="취소"
-                                            Command="{Binding CancelCommand}"
-                                            MinWidth="32" Padding="6,2"/>
-                                    <Button Content="✕" ToolTip="제거"
-                                            Command="{Binding RemoveCommand}"
-                                            MinWidth="32" Padding="6,2"/>
-                                </StackPanel>
-                            </Grid>
-                        </Border>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
-        </GroupBox>
+                    <RadioButton Grid.Column="0" GroupName="F"
+                                 IsChecked="{Binding IsMp3Selected}"
+                                 AutomationProperties.AutomationId="Mp3Radio">
+                        <RadioButton.Template>
+                            <ControlTemplate TargetType="RadioButton">
+                                <Border x:Name="B" Padding="14,10" CornerRadius="6"
+                                        BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
+                                        Background="White" Margin="0,0,6,0">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="🎧" FontSize="15" Margin="0,0,8,0"/>
+                                        <TextBlock Text="{Binding DataContext.Loc[mp3], RelativeSource={RelativeSource AncestorType=Window}}" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsChecked" Value="True">
+                                        <Setter TargetName="B" Property="Background" Value="#EFF6FF"/>
+                                        <Setter TargetName="B" Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+                                        <Setter Property="Foreground" Value="{StaticResource AccentBrush}"/>
+                                    </Trigger>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="B" Property="BorderBrush" Value="#93C5FD"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </RadioButton.Template>
+                    </RadioButton>
 
-        <!-- 하단 요약 -->
-        <Grid Grid.Row="5" Margin="0,6,0,6">
-            <TextBlock Text="{Binding Jobs.Count, StringFormat='총 작업: {0}'}" Opacity="0.7"/>
-        </Grid>
+                    <RadioButton Grid.Column="1" GroupName="F"
+                                 IsChecked="{Binding IsMp4Selected}"
+                                 AutomationProperties.AutomationId="Mp4Radio">
+                        <RadioButton.Template>
+                            <ControlTemplate TargetType="RadioButton">
+                                <Border x:Name="B" Padding="14,10" CornerRadius="6"
+                                        BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
+                                        Background="White" Margin="0,0,6,0">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="🎬" FontSize="15" Margin="0,0,8,0"/>
+                                        <TextBlock Text="{Binding DataContext.Loc[mp4], RelativeSource={RelativeSource AncestorType=Window}}" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsChecked" Value="True">
+                                        <Setter TargetName="B" Property="Background" Value="#EFF6FF"/>
+                                        <Setter TargetName="B" Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+                                        <Setter Property="Foreground" Value="{StaticResource AccentBrush}"/>
+                                    </Trigger>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="B" Property="BorderBrush" Value="#93C5FD"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </RadioButton.Template>
+                    </RadioButton>
 
-        <!-- 로그 -->
-        <GroupBox Grid.Row="6" Header="로그">
-            <ListBox ItemsSource="{Binding LogLines}"
-                     ScrollViewer.VerticalScrollBarVisibility="Auto"
-                     FontFamily="Consolas" FontSize="11"
-                     AutomationProperties.AutomationId="LogList"/>
-        </GroupBox>
+                    <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center" Margin="12,0,0,0">
+                        <TextBlock Text="{Binding Loc[concurrent]}" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
+                        <ComboBox SelectedValue="{Binding MaxConcurrency}" SelectedValuePath="Content"
+                                  MinWidth="56" Margin="6,0,0,0"
+                                  AutomationProperties.AutomationId="ConcurrencyCombo">
+                            <ComboBoxItem Content="1"/>
+                            <ComboBoxItem Content="2"/>
+                            <ComboBoxItem Content="3" IsSelected="True"/>
+                            <ComboBoxItem Content="4"/>
+                            <ComboBoxItem Content="5"/>
+                            <ComboBoxItem Content="6"/>
+                        </ComboBox>
+                    </StackPanel>
+
+                    <Button Grid.Column="4" Content="{Binding Loc[add]}"
+                            Command="{Binding AddCommand}"
+                            MinWidth="140" Margin="12,0,0,0"
+                            AutomationProperties.AutomationId="AddButton"/>
+
+                    <Button Grid.Column="5" Content="{Binding Loc[start_all]}"
+                            Command="{Binding StartAllCommand}"
+                            Style="{StaticResource PrimaryButton}"
+                            MinWidth="130"
+                            AutomationProperties.AutomationId="StartAllButton"/>
+                </Grid>
+            </Grid>
+        </Border>
+
+        <!-- 작업 리스트 / 빈 상태 -->
+        <Border Grid.Row="3" Style="{StaticResource Card}" Padding="0">
+            <Grid>
+                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"
+                            Margin="24,40"
+                            Visibility="{Binding Jobs.Count, Converter={StaticResource CountToVis}, ConverterParameter=invert}">
+                    <TextBlock Text="🎬" FontSize="52" HorizontalAlignment="Center" Opacity="0.7"/>
+                    <TextBlock Text="{Binding Loc[empty_title]}"
+                               FontSize="16" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,10,0,4"/>
+                    <TextBlock Text="{Binding Loc[empty_body]}"
+                               TextAlignment="Center" Foreground="{StaticResource TextMutedBrush}"/>
+                </StackPanel>
+
+                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                              Visibility="{Binding Jobs.Count, Converter={StaticResource CountToVis}}">
+                    <StackPanel>
+                        <Grid Margin="16,12,16,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" VerticalAlignment="Center">
+                                <Run Text="{Binding Loc[jobs_header], Mode=OneWay}"/>
+                                <Run Text=" "/>
+                                <Run Text="{Binding Jobs.Count, Mode=OneWay}" FontWeight="SemiBold"/>
+                                <Run Text=" "/>
+                                <Run Text="{Binding Loc[items], Mode=OneWay}"/>
+                            </TextBlock>
+                            <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                <Button Content="{Binding Loc[cancel_all]}" Command="{Binding CancelAllCommand}"
+                                        AutomationProperties.AutomationId="CancelAllButton"/>
+                                <Button Content="{Binding Loc[clear_completed]}" Command="{Binding ClearCompletedCommand}"
+                                        Margin="0"
+                                        AutomationProperties.AutomationId="ClearCompletedButton"/>
+                            </StackPanel>
+                        </Grid>
+                        <ItemsControl ItemsSource="{Binding Jobs}" AutomationProperties.AutomationId="JobsList">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0" Padding="16,12">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="36"/>
+                                                <ColumnDefinition Width="50"/>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="140"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" Text="{Binding StatusGlyph}" FontSize="18" VerticalAlignment="Center"/>
+                                            <Border Grid.Column="1" Background="#EEF2FF" CornerRadius="4" Padding="6,3" VerticalAlignment="Center" HorizontalAlignment="Left">
+                                                <TextBlock Text="{Binding FormatText}" FontSize="11" FontWeight="SemiBold" Foreground="#4338CA"/>
+                                            </Border>
+                                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="10,0">
+                                                <TextBlock Text="{Binding DisplayTitle}" TextTrimming="CharacterEllipsis" FontWeight="SemiBold"/>
+                                                <TextBlock Text="{Binding StatusText}" Foreground="{StaticResource TextMutedBrush}" FontSize="11" Margin="0,2,0,0"/>
+                                                <TextBlock Text="{Binding ErrorMessage}" Foreground="{StaticResource ErrorBrush}" FontSize="11" TextWrapping="Wrap"
+                                                           Visibility="{Binding ErrorMessage, Converter={StaticResource StringToVis}, FallbackValue=Collapsed}"/>
+                                            </StackPanel>
+                                            <ProgressBar Grid.Column="3" Value="{Binding Progress}" Maximum="1.0" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                                            <StackPanel Grid.Column="4" Orientation="Horizontal">
+                                                <Button Content="📂" Command="{Binding OpenFolderCommand}" Style="{StaticResource IconButton}"/>
+                                                <Button Content="⏹" Command="{Binding CancelCommand}" Style="{StaticResource IconButton}"/>
+                                                <Button Content="✕" Command="{Binding RemoveCommand}" Style="{StaticResource IconButton}"/>
+                                            </StackPanel>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <Border x:Name="DropOverlay"
+                        Background="#CC2563EB" CornerRadius="10"
+                        Visibility="Collapsed" IsHitTestVisible="False">
+                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                        <TextBlock Text="⬇" FontSize="60" HorizontalAlignment="Center" Foreground="White"/>
+                        <TextBlock Text="{Binding Loc[drop_here]}" FontSize="16" Foreground="White" HorizontalAlignment="Center"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
+
+        <Border Grid.Row="4" Style="{StaticResource Card}" Padding="12,10">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="{Binding Loc[save_folder]}" VerticalAlignment="Center"
+                           Foreground="{StaticResource TextMutedBrush}" Margin="0,0,10,0"/>
+                <TextBlock Grid.Column="1" Text="{Binding OutputFolder}" VerticalAlignment="Center"
+                           TextTrimming="CharacterEllipsis"/>
+                <Button Grid.Column="2" Content="{Binding Loc[change]}" Command="{Binding BrowseFolderCommand}"
+                        Margin="10,0,0,0"
+                        AutomationProperties.AutomationId="BrowseButton"/>
+            </Grid>
+        </Border>
     </Grid>
 </Window>
