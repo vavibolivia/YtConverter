@@ -40,7 +40,9 @@ public sealed class DownloadService : IDownloadService
         _workRoot = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "YtConverter", "work");
-        Directory.CreateDirectory(_workRoot);
+        // I-15: Controlled Folder Access 차단 시 앱 크래시 방지
+        try { Directory.CreateDirectory(_workRoot); }
+        catch (Exception ex) { AppLogger.Instance.Warn($"작업 디렉터리 생성 실패: {ex.Message}"); }
     }
 
     public async Task<ConversionResult> ConvertAsync(

@@ -22,7 +22,9 @@ public sealed class QueueStore
         var dir = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "YtConverter");
-        Directory.CreateDirectory(dir);
+        // I-15: Controlled Folder Access 차단 시 앱 크래시 방지
+        try { Directory.CreateDirectory(dir); }
+        catch (Exception ex) { AppLogger.Instance.Warn($"큐 저장 디렉터리 생성 실패 (지속 저장 비활성화): {ex.Message}"); }
         _path = Path.Combine(dir, "queue.json");
     }
 

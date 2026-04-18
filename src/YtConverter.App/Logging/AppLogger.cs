@@ -18,7 +18,8 @@ public sealed class AppLogger
         _logDir = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "YtConverter", "logs");
-        Directory.CreateDirectory(_logDir);
+        // I-15: Controlled Folder Access / 권한 없음 시 앱 크래시 방지
+        try { Directory.CreateDirectory(_logDir); } catch { /* 파일 로그 비활성, UI sink 만 동작 */ }
     }
 
     public void AttachSink(Action<string> sink) => _sinks.Enqueue(sink);

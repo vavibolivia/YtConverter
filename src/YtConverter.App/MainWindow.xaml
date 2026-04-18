@@ -280,10 +280,18 @@
                                                          IsIndeterminate="{Binding IsMuxing}"
                                                          VerticalAlignment="Center" Margin="0,0,12,0"/>
                                             <StackPanel Grid.Column="4" Orientation="Horizontal">
-                                                <Button Content="🔁" ToolTip="재시도" Command="{Binding RetryCommand}" Style="{StaticResource IconButton}"/>
-                                                <Button Content="📂" Command="{Binding OpenFolderCommand}" Style="{StaticResource IconButton}"/>
-                                                <Button Content="⏹" Command="{Binding CancelCommand}" Style="{StaticResource IconButton}"/>
-                                                <Button Content="✕" Command="{Binding RemoveCommand}" Style="{StaticResource IconButton}"/>
+                                                <Button Content="🔁" Command="{Binding RetryCommand}" Style="{StaticResource IconButton}"
+                                                        ToolTip="{Binding DataContext.Loc[btn_retry], RelativeSource={RelativeSource AncestorType=Window}}"
+                                                        AutomationProperties.Name="{Binding DataContext.Loc[btn_retry], RelativeSource={RelativeSource AncestorType=Window}}"/>
+                                                <Button Content="📂" Command="{Binding OpenFolderCommand}" Style="{StaticResource IconButton}"
+                                                        ToolTip="{Binding DataContext.Loc[btn_open_in_folder], RelativeSource={RelativeSource AncestorType=Window}}"
+                                                        AutomationProperties.Name="{Binding DataContext.Loc[btn_open_in_folder], RelativeSource={RelativeSource AncestorType=Window}}"/>
+                                                <Button Content="⏹" Command="{Binding CancelCommand}" Style="{StaticResource IconButton}"
+                                                        ToolTip="{Binding DataContext.Loc[btn_cancel], RelativeSource={RelativeSource AncestorType=Window}}"
+                                                        AutomationProperties.Name="{Binding DataContext.Loc[btn_cancel], RelativeSource={RelativeSource AncestorType=Window}}"/>
+                                                <Button Content="✕" Command="{Binding RemoveCommand}" Style="{StaticResource IconButton}"
+                                                        ToolTip="{Binding DataContext.Loc[btn_remove], RelativeSource={RelativeSource AncestorType=Window}}"
+                                                        AutomationProperties.Name="{Binding DataContext.Loc[btn_remove], RelativeSource={RelativeSource AncestorType=Window}}"/>
                                             </StackPanel>
                                         </Grid>
                                     </Border>

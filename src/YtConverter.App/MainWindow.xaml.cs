@@ -12,7 +12,7 @@ public partial class MainWindow : Window
 {
     private MainViewModel Vm => (MainViewModel)DataContext;
     private static readonly Regex YtUrlRe = new(
-        @"(https?://)?(www\.)?(youtube\.com/|youtu\.be/)\S+",
+        @"(https?://)?(www\.|m\.|music\.)?(youtube\.com/|youtu\.be/)\S+",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     public MainWindow()

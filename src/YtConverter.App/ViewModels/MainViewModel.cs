@@ -209,6 +209,9 @@ public partial class MainViewModel : ObservableObject
 
     private async Task RunJobAsync(JobViewModel job)
     {
+        // P3-01 방지: 이미 실행 중인 잡에 대한 중복 호출 가드
+        if (job.IsRunning || job.Cts is not null) return;
+
         // B-01 수정: 로컬 참조로 획득·반환 → 중간에 _slots 가 교체되어도 안전
         var slots = _slots;
         await slots.WaitAsync().ConfigureAwait(false);
@@ -343,7 +346,7 @@ public partial class MainViewModel : ObservableObject
             var text = Clipboard.GetText().Trim();
             if (string.IsNullOrEmpty(text)) return;
             if (!System.Text.RegularExpressions.Regex.IsMatch(text,
-                @"^(https?://)?(www\.)?(youtube\.com/|youtu\.be/)\S+",
+                @"^(https?://)?(www\.|m\.|music\.)?(youtube\.com/|youtu\.be/)\S+",
                 System.Text.RegularExpressions.RegexOptions.IgnoreCase)) return;
             if (text == _dismissedClipboard) return;
             // URL 이미 입력창/큐에 있으면 제안하지 않음

@@ -12,6 +12,7 @@ namespace YtConverter.App.Services;
 public sealed class FfmpegProvisioner : IFfmpegProvisioner
 {
     private const string DownloadUrl = "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip";
+    private static readonly SemaphoreSlim _ensureLock = new(1, 1);
     private readonly string _cacheDir;
     private readonly string _cachedExe;
     private readonly string _cachedProbe;
@@ -37,6 +38,24 @@ public sealed class FfmpegProvisioner : IFfmpegProvisioner
             AppLogger.Instance.Info($"FFmpeg 캐시 사용: {_cachedExe}");
             return _cachedExe;
         }
+
+        // I-14: 병렬 첫 기동 race 방지 — 전역 락으로 직렬화
+        await _ensureLock.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            // 락 진입 후 재확인 (앞 스레드가 이미 설치 완료)
+            if (File.Exists(_cachedExe))
+            {
+                AppLogger.Instance.Info($"FFmpeg 캐시 사용: {_cachedExe}");
+                return _cachedExe;
+            }
+            return await EnsureInternalAsync(ct).ConfigureAwait(false);
+        }
+        finally { _ensureLock.Release(); }
+    }
+
+    private async Task<string> EnsureInternalAsync(CancellationToken ct)
+    {
 
         var appDirCandidate = Path.Combine(AppContext.BaseDirectory, "ffmpeg.exe");
         if (File.Exists(appDirCandidate))
