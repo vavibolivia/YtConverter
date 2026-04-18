@@ -94,27 +94,18 @@
                     AutomationProperties.AutomationId="OpenFolderButton"/>
         </Grid>
 
-        <!-- 전체 제어 + 라이선스 -->
-        <Grid Grid.Row="3" Margin="0,0,0,8">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="Auto"/>
-            </Grid.ColumnDefinitions>
-            <StackPanel Grid.Column="0" Orientation="Horizontal">
-                <Button Content="▶ 모두 시작" Command="{Binding StartAllCommand}"
-                        MinWidth="120" FontWeight="Bold" Background="#2E7D32" Foreground="White"
-                        AutomationProperties.AutomationId="StartAllButton"/>
-                <Button Content="⏹ 모두 취소" Command="{Binding CancelAllCommand}"
-                        MinWidth="100"
-                        AutomationProperties.AutomationId="CancelAllButton"/>
-                <Button Content="🗑 완료된 작업 지우기" Command="{Binding ClearCompletedCommand}"
-                        MinWidth="150"
-                        AutomationProperties.AutomationId="ClearCompletedButton"/>
-            </StackPanel>
-            <Button Grid.Column="1" Content="{Binding TierBadge}" Command="{Binding OpenLicenseCommand}"
-                    Padding="10,6" MinWidth="180" FontWeight="SemiBold"
-                    AutomationProperties.AutomationId="TierBadge"/>
-        </Grid>
+        <!-- 전체 제어 -->
+        <StackPanel Grid.Row="3" Orientation="Horizontal" Margin="0,0,0,8">
+            <Button Content="▶ 모두 시작" Command="{Binding StartAllCommand}"
+                    MinWidth="120" FontWeight="Bold" Background="#2E7D32" Foreground="White"
+                    AutomationProperties.AutomationId="StartAllButton"/>
+            <Button Content="⏹ 모두 취소" Command="{Binding CancelAllCommand}"
+                    MinWidth="100"
+                    AutomationProperties.AutomationId="CancelAllButton"/>
+            <Button Content="🗑 완료된 작업 지우기" Command="{Binding ClearCompletedCommand}"
+                    MinWidth="150"
+                    AutomationProperties.AutomationId="ClearCompletedButton"/>
+        </StackPanel>
 
         <!-- 작업 리스트 -->
         <GroupBox Grid.Row="4" Header="변환 작업">
