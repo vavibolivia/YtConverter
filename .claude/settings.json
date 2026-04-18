@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(dotnet *)",
+      "Bash(mkdir *)",
+      "Bash(ls *)",
+      "Bash(where *)",
+      "Bash(cat *)",
+      "Bash(type *)",
+      "Bash(powershell *)"
+    ]
+  },
+  "env": {
+    "YT_PROJECT_ROOT": "C:\\workspace\\youtube",
+    "YT_DEBUG_PHASE": "1"
+  }
+}

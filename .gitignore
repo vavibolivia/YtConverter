@@ -1,0 +1,21 @@
+bin/
+obj/
+out/
+*.user
+*.suo
+.vs/
+logs/
+*.log
+.idea/
+.vscode/
+TestResults/
+publish/
+
+# Temp test artifacts
+*.mp3
+*.mp4
+*.webm
+*.zip
+
+# Memory
+memory/

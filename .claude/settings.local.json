@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir -p \"C:/workspace/youtube/.claude/agents\")",
+      "Bash(mkdir -p \"C:/workspace/youtube/logs\")"
+    ]
+  }
+}
