@@ -84,7 +84,9 @@ dotnet publish src/YtConverter.App -c Release -r win-x64 --self-contained true /
 
 **전체 상태:** 100% 기능 동작 확인 (MP3/MP4 변환, FFmpeg 자동 프로비저닝, 진행률, 로깅, UI 렌더)
 
-## 인증 / 배포 (민감정보 미기록)
-- GitHub: 이메일 `vavibolivia@gmail.com`
-- 인증 방법: **`gh auth login` OAuth 플로우 권장** (패스워드/토큰 파일에 기록 금지)
-- 패키지 배포: 아직 미진행
+## 인증 / 배포
+- **GitHub 저장소:** https://github.com/vavibolivia/YtConverter (public, main 브랜치)
+- GitHub 계정: `vavibolivia` (이메일 `vavibolivia@gmail.com`)
+- 인증: `gh auth login --web` → OAuth (토큰 scopes: gist, read:org, repo). `gh auth setup-git` 으로 git credential helper 연결됨
+- 주의: Windows Credential Manager 에 `jjsukho` 계정 캐시가 남아있음. git push 403 발생 시 `gh auth setup-git` 재실행 (gh 토큰 우선 사용)
+- 패키지 배포: 미진행

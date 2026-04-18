@@ -17,6 +17,13 @@ internal static class Program
 {
     private static async Task<int> Main(string[] args)
     {
+        if (args.Length > 0 && args[0] == "--stress")
+        {
+            using var cts = new CancellationTokenSource();
+            Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };
+            return await StressRunner.RunAsync(cts.Token);
+        }
+
         var url = args.Length > 0
             ? args[0]
             : "https://www.youtube.com/watch?v=9q3Rg0xKmpM&list=RD9q3Rg0xKmpM&start_radio=1";
