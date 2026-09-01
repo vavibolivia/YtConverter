@@ -102,42 +102,45 @@ public sealed class DownloadService : IDownloadService
         }
         bool placeholderStillReserved = true;
 
-        // 재개 가능한 작업 디렉터리 (URL+format 이 같으면 같은 디렉터리 재사용)
-        // B-02 수정: URL 전체 대신 videoId 로 hash — &t=, &list= 등 쿼리가 달라도 같은 work 공유
-        var jobId = StableJobId(video.Id.Value, format);
-        var workDir = Path.Combine(_workRoot, jobId);
-        Directory.CreateDirectory(workDir);
-
-        StreamManifest manifest;
+        // 0바이트 placeholder 누수 방지: 예약 직후부터 finally 로 보호한다.
+        // 매니페스트 조회·스트림 선택 구간에서 취소/실패하면 예약 파일이
+        // 사용자 폴더에 0바이트로 남았다.
         try
         {
-            manifest = await _yt.Videos.Streams.GetManifestAsync(url, ct).ConfigureAwait(false);
-        }
-        catch (Exception ex) { throw MapException(ex); }
+            // 재개 가능한 작업 디렉터리 (URL+format 이 같으면 같은 디렉터리 재사용)
+            // B-02 수정: URL 전체 대신 videoId 로 hash — &t=, &list= 등 쿼리가 달라도 같은 work 공유
+            var jobId = StableJobId(video.Id.Value, format);
+            var workDir = Path.Combine(_workRoot, jobId);
+            Directory.CreateDirectory(workDir);
 
-        // 스트림 선택
-        List<IStreamInfo> chosen;
-        if (format == OutputFormat.Mp3)
-        {
-            var audio = manifest.GetAudioOnlyStreams().GetWithHighestBitrate()
-                ?? throw new InvalidOperationException("오디오 스트림을 찾지 못했습니다.");
-            chosen = new List<IStreamInfo> { audio };
-        }
-        else
-        {
-            var videoStream = manifest.GetVideoOnlyStreams()
-                .Where(s => s.Container == Container.Mp4)
-                .OrderByDescending(s => s.VideoQuality)
-                .FirstOrDefault()
-                ?? manifest.GetVideoOnlyStreams().GetWithHighestVideoQuality()
-                ?? throw new InvalidOperationException("비디오 스트림을 찾지 못했습니다.");
-            var audio = manifest.GetAudioOnlyStreams().GetWithHighestBitrate()
-                ?? throw new InvalidOperationException("오디오 스트림을 찾지 못했습니다.");
-            chosen = new List<IStreamInfo> { videoStream, audio };
-        }
+            StreamManifest manifest;
+            try
+            {
+                manifest = await _yt.Videos.Streams.GetManifestAsync(url, ct).ConfigureAwait(false);
+            }
+            catch (Exception ex) { throw MapException(ex); }
 
-        try
-        {
+            // 스트림 선택
+            List<IStreamInfo> chosen;
+            if (format == OutputFormat.Mp3)
+            {
+                var audio = manifest.GetAudioOnlyStreams().GetWithHighestBitrate()
+                    ?? throw new InvalidOperationException("오디오 스트림을 찾지 못했습니다.");
+                chosen = new List<IStreamInfo> { audio };
+            }
+            else
+            {
+                var videoStream = manifest.GetVideoOnlyStreams()
+                    .Where(s => s.Container == Container.Mp4)
+                    .OrderByDescending(s => s.VideoQuality)
+                    .FirstOrDefault()
+                    ?? manifest.GetVideoOnlyStreams().GetWithHighestVideoQuality()
+                    ?? throw new InvalidOperationException("비디오 스트림을 찾지 못했습니다.");
+                var audio = manifest.GetAudioOnlyStreams().GetWithHighestBitrate()
+                    ?? throw new InvalidOperationException("오디오 스트림을 찾지 못했습니다.");
+                chosen = new List<IStreamInfo> { videoStream, audio };
+            }
+
             // 스트림 다운로드 (Range resume)
             long totalBytes = chosen.Sum(s => s.Size.Bytes);
             long cumulative = chosen.Sum(s => FileSize(Path.Combine(workDir, StreamFileName(s))));
