@@ -214,7 +214,12 @@ public partial class MainViewModel : ObservableObject
 
         // B-01 수정: 로컬 참조로 획득·반환 → 중간에 _slots 가 교체되어도 안전
         var slots = _slots;
-        await slots.WaitAsync().ConfigureAwait(false);
+        // 크로스 스레드 크래시 방지: ConfigureAwait(false) 를 쓰면 슬롯이 포화됐을 때
+        // 이후 continuation 이 스레드풀에서 실행된다. 그 상태에서 job.Status 를 바꾸면
+        // OnStatusChanged -> NotifyCanExecuteChanged -> ButtonBase.Command 접근으로
+        // Dispatcher.VerifyAccess 가 InvalidOperationException 을 던져 앱이 죽는다.
+        // 아래 Progress<T> 도 UI SynchronizationContext 를 캡처해야 하므로 UI 스레드 유지.
+        await slots.WaitAsync();
         try
         {
             using var cts = new CancellationTokenSource();
@@ -242,7 +247,7 @@ public partial class MainViewModel : ObservableObject
             try
             {
                 var result = await _downloadService.ConvertAsync(
-                    job.Url.Trim(), job.Format, OutputFolder, progress, cts.Token).ConfigureAwait(false);
+                    job.Url.Trim(), job.Format, OutputFolder, progress, cts.Token);
                 job.OutputPath = result.OutputPath;
                 job.Title = result.VideoTitle;
                 job.Status = JobStatus.Completed;
