@@ -70,6 +70,10 @@ public sealed class DownloadService : IDownloadService
         progress.Report(new ConversionProgress(JobStatus.Resolving, 0.05, video.Title));
         AppLogger.Instance.Info($"영상 확인: \"{video.Title}\" ({video.Duration})");
 
+        // 라이브 방송(진행 중 / 24시간 스트림)은 길이가 null 또는 0 — 매니페스트가 없어 변환 불가
+        if (video.Duration is null || video.Duration == TimeSpan.Zero)
+            throw new InvalidOperationException("라이브 방송은 다운로드할 수 없습니다. 방송이 끝난 뒤 다시 시도하세요.");
+
         Directory.CreateDirectory(outputFolder);
         var safeTitle = SanitizeFileName(video.Title);
         var ext = format == OutputFormat.Mp3 ? "mp3" : "mp4";

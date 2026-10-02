@@ -173,15 +173,31 @@ public partial class MainViewModel : ObservableObject
     {
         if (string.IsNullOrWhiteSpace(Url)) return;
         var urls = Url.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var added = new List<JobViewModel>();
         foreach (var u in urls)
         {
             var job = new JobViewModel { Url = u, Format = SelectedFormat };
             AttachJob(job);
             Jobs.Add(job);
+            added.Add(job);
             AppLogger.Instance.Info($"작업 추가: [{job.FormatText}] {u}");
         }
         Url = string.Empty;
         StartAllCommand.NotifyCanExecuteChanged();
+
+        // 추가 즉시 다운로드 시작 (새로 추가한 작업만 — 실패/취소 작업은 건드리지 않음)
+        _ = StartJobsAsync(added);
+    }
+
+    private async Task StartJobsAsync(IReadOnlyList<JobViewModel> jobs)
+    {
+        CancelAllCommand.NotifyCanExecuteChanged();
+        await Task.WhenAll(jobs.Select(RunJobAsync)).ConfigureAwait(false);
+        await Application.Current.Dispatcher.InvokeAsync(() =>
+        {
+            StartAllCommand.NotifyCanExecuteChanged();
+            CancelAllCommand.NotifyCanExecuteChanged();
+        });
     }
     private bool CanAdd() => !string.IsNullOrWhiteSpace(Url);
     partial void OnUrlChanged(string value) => AddCommand.NotifyCanExecuteChanged();
@@ -214,7 +230,7 @@ public partial class MainViewModel : ObservableObject
 
         // B-01 수정: 로컬 참조로 획득·반환 → 중간에 _slots 가 교체되어도 안전
         var slots = _slots;
-        await slots.WaitAsync().ConfigureAwait(false);
+        await slots.WaitAsync(); // UI 스레드 유지: 이후 job 상태 변경이 CanExecuteChanged 를 발생시킴
         try
         {
             using var cts = new CancellationTokenSource();
@@ -242,7 +258,7 @@ public partial class MainViewModel : ObservableObject
             try
             {
                 var result = await _downloadService.ConvertAsync(
-                    job.Url.Trim(), job.Format, OutputFolder, progress, cts.Token).ConfigureAwait(false);
+                    job.Url.Trim(), job.Format, OutputFolder, progress, cts.Token);
                 job.OutputPath = result.OutputPath;
                 job.Title = result.VideoTitle;
                 job.Status = JobStatus.Completed;
